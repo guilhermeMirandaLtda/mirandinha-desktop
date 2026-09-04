@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Banco de histórico local (gerado em runtime)
+mirandinha_history.db
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

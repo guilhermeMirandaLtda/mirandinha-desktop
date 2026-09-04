@@ -1,0 +1,45 @@
+﻿:root {
+  /* Tokens de Cor Mofi (Preset 1) */
+  --brand-primary: #7A70BA;
+  --brand-primary-hover: #675da6;
+  --brand-primary-light: #f0edf9;
+  --brand-secondary: #48A3D7;
+  --brand-secondary-hover: #378dbd;
+  --brand-secondary-light: #e8f5fc;
+
+  /* Cores Semanticas */
+  --color-success: #2E8A5C;
+  --color-success-bg: #E4F4EC;
+  --color-warning: #B67A1E;
+  --color-warning-bg: #FCF0DE;
+  --color-danger: #C6164F;
+  --color-danger-bg: #FBE7E7;
+  --color-info: #48A3D7;
+  --color-info-bg: #EAF5FC;
+
+  /* Superficies e Linhas */
+  --bg-body: #F4F6F9;
+  --panel-bg: #FFFFFF;
+  --sidebar-bg: #202634;
+  --sidebar-text: #BAC0CD;
+  --sidebar-hover: #293041;
+  --sidebar-active: #7A70BA;
+
+  --ink-primary: #201F2B;
+  --ink-secondary: #5B596B;
+  --ink-muted: #8E8D9A;
+  --line-border: #E8E6ED;
+  --line-soft: #F1EFF5;
+
+  /* Tipografia */
+  --font-main: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace;
+
+  /* Bordas e Sombras */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+  --shadow-card: 0 4px 18px rgba(32, 31, 43, 0.05);
+  --shadow-hover: 0 8px 24px rgba(122, 112, 186, 0.12);
+}

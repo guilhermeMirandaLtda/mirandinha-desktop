@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design System — Mofi (Pixelstrap) · Revisão visual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ---- tokens reais extraídos do template (preset color-1, ativo por padrão) ---- */
+    --brand-primary: #7A70BA;
+    --brand-secondary: #48A3D7;
+    --chart-accent: #5527FF;
+    --axis-gray: #8D8D8D;
+
+    /* ---- chrome do próprio documento (não é do Mofi — é a nossa camada de leitura) ---- */
+    --bg: #FAFAF9;
+    --panel: #FFFFFF;
+    --ink: #201F2B;
+    --ink-soft: #5B596B;
+    --ink-faint: #92909F;
+    --line: #E7E5EC;
+    --line-soft: #F0EEF4;
+    --confirmed: #3F8F6B;
+    --confirmed-bg: #EAF5EF;
+    --inferred: #B67A1E;
+    --inferred-bg: #FBF1E1;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Outfit', sans-serif;
+    font-size:16px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .layout{
+    display:grid;
+    grid-template-columns:260px minmax(0,1fr);
+    max-width:1240px;
+    margin:0 auto;
+  }
+
+  /* ---------- SIDEBAR ---------- */
+  aside{
+    position:sticky;
+    top:0;
+    align-self:start;
+    height:100vh;
+    overflow-y:auto;
+    padding:36px 22px 36px 32px;
+    border-right:1px solid var(--line);
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:6px;
+  }
+  .brand-swatch{
+    width:16px;height:16px;border-radius:4px;
+    background:linear-gradient(135deg, var(--brand-primary) 50%, var(--brand-secondary) 50%);
+    flex-shrink:0;
+  }
+  .brand-name{font-weight:700;font-size:15px;letter-spacing:.01em}
+  .brand-sub{font-size:12.5px;color:var(--ink-faint);margin:0 0 28px 26px;line-height:1.5}
+
+  nav.toc{display:flex;flex-direction:column;gap:2px;margin-bottom:28px}
+  nav.toc a{
+    color:var(--ink-soft);
+    text-decoration:none;
+    font-size:13.5px;
+    padding:7px 10px;
+    border-radius:var(--radius-sm);
+    transition:background .15s, color .15s;
+  }
+  nav.toc a:hover{background:var(--line-soft);color:var(--ink)}
+  nav.toc a.sub{padding-left:22px;font-size:13px;color:var(--ink-faint)}
+
+  .legend{
+    padding-top:20px;
+    border-top:1px solid var(--line);
+  }
+  .legend-title{font-size:11.5px;color:var(--ink-faint);margin-bottom:10px}
+  .legend-row{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink-soft);margin-bottom:8px}
+  .dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0}
+  .dot.ok{background:var(--confirmed)}
+  .dot.inf{background:var(--inferred)}
+
+  /* ---------- MAIN ---------- */
+  main{padding:48px 56px 120px 56px; min-width:0}
+
+  .doc-head{margin-bottom:56px}
+  .doc-head .kicker{
+    font-size:13px;color:var(--brand-primary);font-weight:600;margin:0 0 10px 0;
+  }
+  h1{font-size:34px;font-weight:700;letter-spacing:-0.01em;margin:0 0 14px 0}
+  .doc-meta{
+    display:flex;flex-wrap:wrap;gap:18px;
+    font-size:13px;color:var(--ink-faint);
+    padding-top:16px;border-top:1px solid var(--line);
+  }
+  .doc-meta code{font-family:var(--mono);background:var(--line-soft);padding:2px 6px;border-radius:4px;font-size:12px}
+
+  section{margin-bottom:64px;scroll-margin-top:24px}
+  section h2{
+    font-size:23px;font-weight:600;margin:0 0 6px 0;letter-spacing:-0.005em;
+    display:flex;align-items:baseline;gap:10px;
+  }
+  section h2 .num{font-family:var(--mono);font-size:14px;color:var(--ink-faint);font-weight:500}
+  .section-intro{color:var(--ink-soft);font-size:14.5px;max-width:680px;margin:0 0 28px 0}
+  h3{font-size:16px;font-weight:600;margin:32px 0 14px 0}
+
+  .status{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:11.5px;font-weight:500;
+    padding:3px 9px 3px 7px;border-radius:20px;
+    margin-bottom:16px;
+  }
+  .status .dot{margin-top:0}
+  .status.ok{background:var(--confirmed-bg);color:var(--confirmed)}
+  .status.inf{background:var(--inferred-bg);color:var(--inferred)}
+
+  /* ---------- color swatches ---------- */
+  .preset-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+    gap:14px;margin-bottom:8px;
+  }
+  .preset{
+    border:1px solid var(--line);border-radius:var(--radius-md);
+    overflow:hidden;background:var(--panel);
+    position:relative;
+  }
+  .preset.active{border-color:var(--brand-primary);box-shadow:0 0 0 1px var(--brand-primary)}
+  .preset-swatch{height:64px;display:flex}
+  .preset-swatch div{flex:1}
+  .preset-body{padding:12px 14px}
+  .preset-name{font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+  .active-pill{
+    font-size:10px;font-weight:600;color:#fff;background:var(--brand-primary);
+    padding:2px 7px;border-radius:20px;letter-spacing:.02em;
+  }
+  .preset-hex{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);margin-top:6px;line-height:1.7}
+  .preset-hex span{display:block}
+
+  /* ---------- typography ---------- */
+  .type-specimen{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:32px 36px;margin-bottom:20px;
+  }
+  .type-specimen .glyphs{font-size:38px;font-weight:600;letter-spacing:-0.01em;margin-bottom:8px;word-break:break-word}
+  .type-specimen .meta{font-size:13px;color:var(--ink-faint);font-family:var(--mono)}
+  .weight-rows{display:flex;flex-direction:column;gap:14px;margin-top:24px;padding-top:24px;border-top:1px solid var(--line-soft)}
+  .weight-row{display:flex;align-items:baseline;gap:18px}
+  .weight-row .w-label{width:130px;font-family:var(--mono);font-size:12px;color:var(--ink-faint);flex-shrink:0}
+  .weight-row .w-sample{font-size:20px}
+
+  .scale-table{width:100%;border-collapse:collapse;margin-top:8px}
+  .scale-table td{padding:12px 4px;border-top:1px solid var(--line-soft);vertical-align:baseline}
+  .scale-table td.tok{font-family:var(--mono);font-size:12px;color:var(--ink-faint);width:140px}
+  .scale-table td.val{font-family:var(--mono);font-size:12px;color:var(--ink-faint);width:110px}
+  .scale-table td.sample{font-weight:600}
+
+  /* ---------- badges / progress ---------- */
+  .demo-row{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:24px 28px;margin-bottom:16px;
+  }
+  .demo-label{font-size:12px;font-family:var(--mono);color:var(--ink-faint);margin-bottom:14px}
+  .badges{display:flex;flex-wrap:wrap;gap:10px}
+  .badge{
+    display:inline-flex;align-items:center;padding:5px 12px;border-radius:20px;
+    font-size:12.5px;font-weight:500;
+  }
+  .badge-primary{background:var(--brand-primary);color:#fff}
+  .badge-info{background:var(--brand-secondary);color:#fff}
+  .badge-light-success{background:#E4F4EC;color:#2E8A5C}
+  .badge-light-warning{background:#FCF0DE;color:#B67A1E}
+  .badge-light-danger{background:#FBE7E7;color:#C6164F}
+
+  .progress-set{display:flex;flex-direction:column;gap:16px}
+  .progress-item{display:grid;grid-template-columns:130px 1fr 44px;align-items:center;gap:14px}
+  .progress-item .p-label{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint)}
+  .progress-track{height:8px;background:var(--line-soft);border-radius:2px;overflow:hidden}
+  .progress-fill{height:100%;border-radius:2px}
+  .progress-item .p-val{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);text-align:right}
+
+  /* ---------- component cards ---------- */
+  .comp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .kpi-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:20px 22px;
+  }
+  .kpi-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+  .kpi-title{font-size:13px;color:var(--ink-soft);font-weight:500}
+  .kpi-period{display:flex;gap:4px}
+  .kpi-period span{font-size:10.5px;color:var(--ink-faint);padding:3px 7px;border:1px solid var(--line);border-radius:14px}
+  .kpi-value{font-size:26px;font-weight:700;letter-spacing:-0.01em;margin-bottom:4px}
+  .kpi-delta{font-size:12.5px;font-weight:600;color:var(--confirmed)}
+
+  .member-row{
+    display:flex;align-items:center;gap:12px;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);
+    padding:14px 18px;
+  }
+  .avatar{
+    width:36px;height:36px;border-radius:50%;
+    background:linear-gradient(135deg,var(--brand-primary),var(--brand-secondary));
+    flex-shrink:0;
+  }
+  .member-info{flex:1;min-width:0}
+  .member-name{font-size:13.5px;font-weight:600}
+  .member-role{font-size:12px;color:var(--ink-faint)}
+
+  /* ---------- critique callouts ---------- */
+  .callout{
+    border-left:3px solid var(--inferred);
+    background:var(--panel);border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+    border-radius:0 var(--radius-md) var(--radius-md) 0;
+    padding:16px 20px;margin-bottom:12px;
+  }
+  .callout.fixed{border-left-color:var(--confirmed)}
+  .callout-title{font-weight:600;font-size:14px;margin-bottom:5px}
+  .callout p{margin:0;font-size:13.5px;color:var(--ink-soft)}
+  .callout code{font-family:var(--mono);font-size:12px;background:var(--line-soft);padding:1px 5px;border-radius:4px}
+
+  .next-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+  .next-list li{
+    display:flex;gap:12px;align-items:flex-start;
+    font-size:14px;color:var(--ink-soft);
+  }
+  .next-list li::before{
+    content:"";width:6px;height:6px;border-radius:50%;background:var(--brand-secondary);
+    margin-top:8px;flex-shrink:0;
+  }
+
+  footer{
+    padding:28px 56px 60px 56px;
+    color:var(--ink-faint);font-size:12.5px;
+    border-top:1px solid var(--line);
+  }
+
+  @media (max-width: 860px){
+    .layout{grid-template-columns:1fr}
+    aside{position:relative;height:auto;border-right:none;border-bottom:1px solid var(--line)}
+    main{padding:36px 22px 80px 22px}
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <aside>
+    <div class="brand">
+      <div class="brand-swatch"></div>
+      <div class="brand-name">Mofi — Design System</div>
+    </div>
+    <p class="brand-sub">Tokens extraídos de admin.pixelstrap.net/mofi. Documento de revisão visual — a fonte de verdade editável é o .md.</p>
+
+    <nav class="toc">
+      <a href="#cores">1.1 Paleta de cores</a>
+      <a href="#tipografia">1.2 Tipografia</a>
+      <a href="#semantica">1.3 Badges & progress</a>
+      <a href="#componentes">1.4 Componentes</a>
+      <a href="#tabs">1.5 Tabs</a>
+      <a href="#inconsistencias">1.6 Inconsistências confirmadas</a>
+      <a href="#critica">2. Análise crítica</a>
+      <a href="#proximos">3. Próximos passos</a>
+    </nav>
+
+    <div class="legend">
+      <div class="legend-title">Legenda</div>
+      <div class="legend-row"><span class="dot ok"></span> Confirmado — extraído do código-fonte real (não estimado)</div>
+      <div class="legend-row"><span class="dot inf"></span> Inferência — ainda sem confirmação em style.css externo</div>
+    </div>
+  </aside>
+
+  <main>
+
+    <div class="doc-head">
+      <p class="kicker">Revisão visual</p>
+      <h1>Design tokens do Mofi, renderizados</h1>
+      <div class="doc-meta">
+        <span>Fonte: 5 páginas do Mofi (Dashboard, Sweet-alert2, Dropzone, Tab-bootstrap, Validation Form)</span>
+        <span>Preset ativo: <code>color-1</code></span>
+        <span>Tema: <code>body.light</code></span>
+        <span>Papéis de cor confirmados: <code>7</code></span>
+      </div>
+    </div>
+
+    <section id="cores">
+      <h2><span class="num">1.1</span>Paleta de cores</h2>
+      <span class="status ok"><span class="dot ok"></span>confirmado</span>
+      <p class="section-intro">Extraída do painel de customização embutido no template — 6 combinações oficiais de primary/secondary, aplicáveis a light e dark layout. O preset <strong>color-1</strong> é o que carrega por padrão.</p>
+
+      <div class="preset-grid">
+        <div class="preset active">
+          <div class="preset-swatch"><div style="background:#7A70BA"></div><div style="background:#48A3D7"></div></div>
+          <div class="preset-body">
+            <div class="preset-name">color-1 <span class="active-pill">ativo</span></div>
+            <div class="preset-hex"><span>primary #7A70BA</span><span>secondary #48A3D7</span></div>
+          </div>
+        </div>
+        <div class="preset">
+          <div class="preset-swatch"><div style="background:#88967E"></div><div style="background:#29353A"></div></div>
+          <div class="preset-body">
+            <div class="preset-name">color-2</div>
+            <div class="preset-hex"><span>primary #88967E</span><span>secondary #29353A</span></div>
+          </div>
+        </div>
+        <div class="preset">
+          <div class="preset-swatch"><div style="background:#C6164F"></div><div style="background:#372363"></div></div>
+          <div class="preset-body">
+            <div class="preset-name">color-3</div>
+            <div class="preset-hex"><span>primary #C6164F</span><span>secondary #372363</span></div>
+          </div>
+        </div>
+        <div class="preset">
+          <div class="preset-swatch"><div style="background:#4B232D"></div><div style="background:#8E6343"></div></div>
+          <div class="preset-body">
+            <div class="preset-name">color-4</div>
+            <div class="preset-hex"><span>primary #4B232D</span><span>secondary #8E6343</span></div>
+          </div>
+        </div>
+        <div class="preset">
+          <div class="preset-swatch"><div style="background:#007A91"></div><div style="background:#534686"></div></div>
+          <div class="preset-body">
+            <div class="preset-name">color-5</div>
+            <div class="preset-hex"><span>primary #007A91</span><span>secondary #534686</span></div>
+          </div>
+        </div>
+        <div class="preset">
+          <div class="preset-swatch"><div style="background:#56409F"></div><div style="background:#21637F"></div></div>
+          <div class="preset-body">
+            <div class="preset-name">color-6</div>
+            <div class="preset-hex"><span>primary #56409F</span><span>secondary #21637F</span></div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Cor de gráfico (dissociada da marca)</h3>
+      <div class="demo-row">
+        <div class="demo-label">encontrada em marcadores de ApexCharts — não corresponde ao primary oficial</div>
+        <div style="display:flex;gap:24px;align-items:center">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:28px;height:28px;border-radius:50%;background:#5527FF"></div>
+            <span style="font-family:var(--mono);font-size:13px">#5527FF <span style="color:var(--ink-faint)">chart-accent</span></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:28px;height:28px;border-radius:50%;background:#7A70BA"></div>
+            <span style="font-family:var(--mono);font-size:13px">#7A70BA <span style="color:var(--ink-faint)">brand-primary</span></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tipografia">
+      <h2><span class="num">1.2</span>Tipografia</h2>
+      <span class="status ok"><span class="dot ok"></span>fonte confirmada</span>
+      <span class="status inf"><span class="dot inf"></span>escala estimada</span>
+      <p class="section-intro">A família <strong>Outfit</strong> foi confirmada via atributo <code>font-family="Outfit, sans-serif"</code> nos textos SVG gerados pelo ApexCharts. Esta página inteira já está usando essa mesma fonte, não uma aproximação.</p>
+
+      <div class="type-specimen">
+        <div class="glyphs">Aa Bb Cc 0123</div>
+        <div class="meta">Outfit · sans-serif · confirmado no código-fonte renderizado</div>
+
+        <div class="weight-rows">
+          <div class="weight-row"><span class="w-label">300 · light</span><span class="w-sample" style="font-weight:300">Good day, Lena Miller</span></div>
+          <div class="weight-row"><span class="w-label">400 · regular</span><span class="w-sample" style="font-weight:400">Good day, Lena Miller</span></div>
+          <div class="weight-row"><span class="w-label">500 · medium</span><span class="w-sample" style="font-weight:500">Good day, Lena Miller</span></div>
+          <div class="weight-row"><span class="w-label">600 · semibold</span><span class="w-sample" style="font-weight:600">Good day, Lena Miller</span></div>
+          <div class="weight-row"><span class="w-label">700 · bold</span><span class="w-sample" style="font-weight:700">Good day, Lena Miller</span></div>
+        </div>
+      </div>
+
+      <h3>Escala tipográfica (estimada — não confirmada em style.css)</h3>
+      <table class="scale-table">
+        <tr><td class="tok">--font-size-h1</td><td class="val">~28px / 700</td><td class="sample" style="font-size:28px;font-weight:700">Good day, Lena Miller</td></tr>
+        <tr><td class="tok">--font-size-h4</td><td class="val">~17px / 600</td><td class="sample" style="font-size:17px;font-weight:600">Opening of leaflets</td></tr>
+        <tr><td class="tok">--font-size-body</td><td class="val">~14px / 400</td><td class="sample" style="font-size:14px;font-weight:400">Welcome to the Mofi family</td></tr>
+        <tr><td class="tok">--font-size-small</td><td class="val">~12px / 400</td><td class="sample" style="font-size:12px;font-weight:400;color:var(--ink-faint)">12 Aug 2024 · 200 Kb</td></tr>
+      </table>
+    </section>
+
+    <section id="semantica">
+      <h2><span class="num">1.3</span>Badges & progress bars</h2>
+      <span class="status ok"><span class="dot ok"></span>classes confirmadas no HTML</span>
+      <p class="section-intro">As classes abaixo existem literalmente no código-fonte. As cores exatas de preenchimento não vêm do style.css (não capturado) — usei uma leitura visual plausível para <code>light-success</code> / <code>light-warning</code>, mantendo os tokens de marca reais para primary/info.</p>
+
+      <div class="demo-row">
+        <div class="demo-label">badge-primary · badge-info · badge-light-success · badge-light-warning · badge-light-danger (7º papel, confirmado em Tab-bootstrap)</div>
+        <div class="badges">
+          <span class="badge badge-primary">Primary</span>
+          <span class="badge badge-info">Info</span>
+          <span class="badge badge-light-success">Working</span>
+          <span class="badge badge-light-warning">Away</span>
+          <span class="badge badge-light-danger">Danger</span>
+        </div>
+      </div>
+
+      <div class="demo-row">
+        <div class="demo-label">progress-striped-{primary | secondary | tertiary | warning} + b-r-2</div>
+        <div class="progress-set">
+          <div class="progress-item">
+            <span class="p-label">primary</span>
+            <div class="progress-track"><div class="progress-fill" style="width:53%;background:#7A70BA"></div></div>
+            <span class="p-val">53%</span>
+          </div>
+          <div class="progress-item">
+            <span class="p-label">secondary</span>
+            <div class="progress-track"><div class="progress-fill" style="width:13%;background:#48A3D7"></div></div>
+            <span class="p-val">13%</span>
+          </div>
+          <div class="progress-item">
+            <span class="p-label">tertiary <span style="color:var(--inferred)">·não confirmado</span></span>
+            <div class="progress-track"><div class="progress-fill" style="width:84%;background:#B6B6B6"></div></div>
+            <span class="p-val">84%</span>
+          </div>
+          <div class="progress-item">
+            <span class="p-label">warning</span>
+            <div class="progress-track"><div class="progress-fill" style="width:14%;background:#B67A1E"></div></div>
+            <span class="p-val">14%</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="componentes">
+      <h2><span class="num">1.4</span>Componentes do dashboard</h2>
+      <span class="status ok"><span class="dot ok"></span>estrutura confirmada no HTML</span>
+      <p class="section-intro">Reconstrução fiel dos dois padrões de card mais repetidos no dashboard, usando os tokens reais.</p>
+
+      <div class="comp-grid">
+        <div class="kpi-card">
+          <div class="kpi-top">
+            <span class="kpi-title">Opening of leaflets</span>
+            <div class="kpi-period"><span>Weekly</span><span>Monthly</span><span>Yearly</span></div>
+          </div>
+          <div class="kpi-value">$ 12,463</div>
+          <div class="kpi-delta">+ 20.08%</div>
+        </div>
+
+        <div class="member-row">
+          <div class="avatar"></div>
+          <div class="member-info">
+            <div class="member-name">Ashley Hart</div>
+            <div class="member-role">Website Design · 05 hours</div>
+          </div>
+          <span class="badge badge-light-success">Working</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="tabs">
+      <h2><span class="num">1.5</span>Tabs</h2>
+      <span class="status ok"><span class="dot ok"></span>4 variantes confirmadas na mesma página</span>
+      <p class="section-intro">Página Tab-bootstrap combina estilo × cor × orientação. Reaproveita o mesmo componente-base (<code>nav</code>/<code>nav-link</code>) usado no menu do header — bom sinal de reuso de token.</p>
+
+      <div class="demo-row">
+        <div class="demo-label">nav-tabs · border-tab · nav-pills — combinadas com os 7 papéis semânticos</div>
+        <div style="display:flex;flex-direction:column;gap:22px">
+          <div style="display:flex;gap:2px;border-bottom:1px solid var(--line)">
+            <span style="padding:10px 16px;font-size:13.5px;font-weight:600;color:var(--brand-primary);border-bottom:2px solid var(--brand-primary)">Overview</span>
+            <span style="padding:10px 16px;font-size:13.5px;color:var(--ink-faint)">Activity</span>
+            <span style="padding:10px 16px;font-size:13.5px;color:var(--ink-faint)">Settings</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span style="padding:7px 16px;border-radius:20px;font-size:13px;font-weight:600;background:#C6164F;color:#fff">Danger</span>
+            <span style="padding:7px 16px;border-radius:20px;font-size:13px;color:var(--ink-soft);border:1px solid var(--line)">Info</span>
+            <span style="padding:7px 16px;border-radius:20px;font-size:13px;color:var(--ink-soft);border:1px solid var(--line)">Success</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="inconsistencias">
+      <h2><span class="num">1.6</span>Inconsistências confirmadas</h2>
+      <span class="status inf"><span class="dot inf"></span>problemas reais, não hipotéticos</span>
+      <p class="section-intro">Diferente das outras seções, aqui o objetivo não é mostrar o token — é mostrar onde o próprio template não segue o token que ele mesmo define.</p>
+
+      <div class="demo-row">
+        <div class="demo-label">Modal (SweetAlert2) — cor de fábrica da biblioteca, não a marca</div>
+        <div style="display:flex;gap:28px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px">
+            <button style="background:#7066e0;color:#fff;border:0;border-radius:6px;padding:8px 18px;font-family:'Outfit',sans-serif;font-size:13px;font-weight:500">OK</button>
+            <span style="font-family:var(--mono);font-size:12px;color:var(--ink-faint)">#7066e0 · swal2 default, não #7A70BA</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo-row">
+        <div class="demo-label">Upload de arquivo — duas bibliotecas concorrentes na mesma tela</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px;border:1.5px dashed var(--line);border-radius:var(--radius-md);padding:20px;text-align:center">
+            <div style="font-size:12px;font-family:var(--mono);color:var(--ink-faint);margin-bottom:4px">dropzone.js</div>
+            <div style="font-size:12.5px;color:var(--ink-soft)">3 ocorrências no DOM</div>
+          </div>
+          <div style="flex:1;min-width:180px;border:1.5px dashed var(--line);border-radius:var(--radius-md);padding:20px;text-align:center">
+            <div style="font-size:12px;font-family:var(--mono);color:var(--ink-faint);margin-bottom:4px">filepond</div>
+            <div style="font-size:12.5px;color:var(--ink-soft)">11 ocorrências no DOM</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="critica">
+      <h2><span class="num">2</span>Análise crítica</h2>
+      <p class="section-intro">Riscos e inconsistências reais, não retórica de aprovação automática.</p>
+
+      <div class="callout">
+        <div class="callout-title">Cor de gráfico dissociada da marca</div>
+        <p>O ApexCharts usa <code>#5527FF</code> em marcadores, enquanto o primary oficial do preset ativo é <code>#7A70BA</code>. A governança de tokens não chegou até a camada de gráficos.</p>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">Papel "tertiary" fora do padrão Bootstrap</div>
+        <p>O template usa <code>primary/secondary/tertiary/success/warning/info</code> como papéis semânticos. "Tertiary" não existe no Bootstrap 5 nativo — decisão consciente necessária: manter com propósito documentado ou remapear.</p>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">3 bibliotecas de ícones na mesma tela</div>
+        <p>Font Awesome, Feather e Icofont confirmados convivendo na página inicial — dívida técnica de bundle size observada no código, não hipotética.</p>
+      </div>
+
+      <div class="callout fixed">
+        <div class="callout-title">Correção registrada: dark mode não é página duplicada</div>
+        <p>Hipótese anterior estava errada. O código mostra <code>body.light</code> + presets compartilhados entre light/dark — padrão saudável de tema por classe, não duplicação de HTML.</p>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">Modal rompe a identidade visual — no momento de maior atenção do usuário</div>
+        <p>SweetAlert2 usa <code>#7066e0</code>/<code>#dc3741</code> de fábrica, não os tokens de marca. É justamente o componente que aparece em confirmações e erros críticos — onde a inconsistência é mais visível, não menos.</p>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">Padrão recorrente: nenhuma decisão de biblioteca única por categoria</div>
+        <p>3 bibliotecas de ícones, 2 de upload de arquivo (Dropzone.js + FilePond), 10 documentadas de gráfico. Deixou de ser um risco pontual — é a característica mais consistente do template inteiro.</p>
+      </div>
+    </section>
+
+    <section id="proximos">
+      <h2><span class="num">3</span>Próximos passos</h2>
+      <ul class="next-list">
+        <li>Enviar o <code>style.css</code> (ou pasta <code>_files/</code> completa) para fechar escala tipográfica e spacing em rem</li>
+        <li>Decidir o destino do papel de cor "tertiary" antes de tokenizar componentes</li>
+        <li>Unificar a paleta de gráficos com os tokens de marca (#5527FF vs #7A70BA)</li>
+        <li>Reskinnar o SweetAlert2 com os tokens de marca — mudança pequena, alto impacto de percepção</li>
+        <li>Escolher uma única biblioteca por categoria (ícones, upload, gráficos) antes de escalar o produto</li>
+      </ul>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  Documento de revisão visual — a fonte de verdade editável continua sendo o .md. Gerado a partir de evidência real extraída do HTML salvo pelo usuário, não de inspeção visual da UI renderizada.
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Normaliza fim de linha no repositório (LF), preservando o checkout nativo no Windows
+* text=auto
+
+*.py    text eol=lf
+*.js    text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.sql   text eol=lf
+*.md    text eol=lf
+
+# Binários — nunca converter
+*.wasm  binary
+*.jpg   binary
+*.png   binary
+*.db    binary
