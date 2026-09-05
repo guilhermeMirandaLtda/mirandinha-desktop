@@ -1,0 +1,12 @@
+{
+  "transaction": "/nme52n",
+  "name": "Modificar Requisição de Compra (ME52N)",
+  "version": "1.0",
+  "elements": {
+    "btn_other_req": "wnd[0]/tbar[1]/btn[17]",
+    "input_banfn_popup": "wnd[1]/usr/subSUB0:SAPLMEGUI:0003/ctxtMEPO_SELECT_DOCUMENT-BANFN",
+    "btn_confirm_popup": "wnd[1]/tbar[0]/btn[0]",
+    "btn_save": "wnd[0]/tbar[0]/btn[11]",
+    "statusbar": "wnd[0]/sbar"
+  }
+}

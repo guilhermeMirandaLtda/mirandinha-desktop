@@ -1,0 +1,23 @@
+{
+  "transaction": "/ncj20n",
+  "name": "Project Builder (CJ20N)",
+  "version": "1.0",
+  "elements": {
+    "btn_open": "wnd[0]/shellcont/shellcont/shell/shellcont[0]/shell/shellcont[0]/shell",
+    "filter_proj_ext": "wnd[1]/usr/ctxtCNPB_W_ADD_OBJ_DYN-PROJ_EXT",
+    "filter_prps_ext": "wnd[1]/usr/ctxtCNPB_W_ADD_OBJ_DYN-PRPS_EXT",
+    "input_aufnr": "wnd[1]/usr/ctxtCNPB_W_ADD_OBJ_DYN-AUFNR",
+    "btn_search_confirm": "wnd[1]/tbar[0]/btn[0]",
+    "tree_project": "wnd[0]/shellcont/shellcont/shell/shellcont[0]/shell/shellcont[1]/shell",
+    "toolbar_overview": "wnd[0]/usr/subDETAIL_AREA:SAPLCNPB_M:1010/cntlTOOLBAR_CONTAINER_OVERVIEW/shellcont/shell",
+    "btn_mass_copy": "wnd[0]/usr/subDETAIL_AREA:SAPLCNPB_M:1010/subVIEW_AREA:SAPLCOMK:2799/tabsTABSTRIP_2700/tabpALLE/ssubSUBSCR_2000:SAPLCOMK:2701/btnICON_SYSTEM_COPY",
+    "btn_deselect_all": "wnd[1]/usr/btnMALO_F",
+    "chk_mark_bdter": "wnd[1]/usr/chkFLG_MARK_RESBD-MARK_BDTER",
+    "input_bdter": "wnd[1]/usr/ctxtRESBD-BDTER",
+    "btn_mark_all_lines": "wnd[1]/usr/btnMAAL",
+    "btn_modal_confirm": "wnd[1]/tbar[0]/btn[13]",
+    "btn_modal_enter": "wnd[1]/tbar[0]/btn[0]",
+    "btn_save": "wnd[0]/tbar[0]/btn[11]",
+    "btn_popup_save_confirm": "wnd[1]/usr/btnSPOP-OPTION1"
+  }
+}

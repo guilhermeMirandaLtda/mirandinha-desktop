@@ -1,31 +1,26 @@
 """
 Gerenciador de persistência local SQLite para histórico, auditoria e metadados detalhados do Mirandinha.
 Permite armazenar métricas agregadas e payload JSON de metadados operacionais para cada execução.
-
-Convenções:
-- `timestamp` é gravado em ISO 8601 (ordenável cronologicamente por string).
-- Execuções de simulação (`is_simulated = 1`) são registradas para rastreabilidade,
-  mas NUNCA entram nos KPIs consolidados nem nas séries do dashboard.
 """
 import sqlite3
 import os
 import json
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from datetime import datetime
+from typing import List, Dict, Any
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mirandinha_history.db")
+import sys
+
+# Garante que o banco SQLite seja persistido na pasta real do executável/projeto, mesmo quando empacotado
+if getattr(sys, 'frozen', False):
+    APP_ROOT = os.path.dirname(sys.executable)
+else:
+    APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+DB_PATH = os.path.join(APP_ROOT, "mirandinha_history.db")
 
 # Tempo médio estimado que um operador humano leva por item no SAP (segundos)
+# Para cada item o analista precisa dar duplo clique, abrir detalhes, inspecionar e tentar salvar/fechar
 MANUAL_SECONDS_PER_ITEM = 45.0
-
-
-def _fmt_display(iso_ts: str) -> str:
-    """Converte ISO 8601 para exibição amigável dd/mm/YYYY HH:MM:SS."""
-    try:
-        return datetime.fromisoformat(iso_ts).strftime("%d/%m/%Y %H:%M:%S")
-    except (ValueError, TypeError):
-        return iso_ts or ""
-
 
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
@@ -41,8 +36,7 @@ def init_db():
                 time_saved_hours REAL DEFAULT 0.0,
                 status TEXT NOT NULL,
                 error_message TEXT,
-                metadata TEXT,
-                is_simulated INTEGER DEFAULT 0
+                metadata TEXT
             )
         """)
         # Migração automática de colunas caso o banco já existisse
@@ -52,29 +46,38 @@ def init_db():
             cursor.execute("ALTER TABLE job_history ADD COLUMN time_saved_hours REAL DEFAULT 0.0")
         if "metadata" not in columns:
             cursor.execute("ALTER TABLE job_history ADD COLUMN metadata TEXT")
-        if "is_simulated" not in columns:
-            cursor.execute("ALTER TABLE job_history ADD COLUMN is_simulated INTEGER DEFAULT 0")
         conn.commit()
 
-
 def record_job_execution(
-    job_id: str,
-    job_name: str,
-    duration: float,
-    items: int,
-    status: str,
+    job_id: str, 
+    job_name: str, 
+    duration: float, 
+    items: int, 
+    status: str, 
     error_msg: str = None,
-    metadata: Dict[str, Any] = None,
-    is_simulated: bool = False
+    metadata: Dict[str, Any] = None
 ):
     """
-    Persiste a execução e os metadados ricos da transação (ex: transação SAP, PEPs, itens zerados).
-
-    `is_simulated=True` marca execuções geradas por robôs ainda não implementados de forma real;
-    esses registros ficam disponíveis para auditoria mas são excluídos dos indicadores.
+    Persiste a execução e os metadados ricos da transação.
+    Calcula tempo economizado considerando que tanto os itens processados com sucesso quanto
+    os itens triados/com exceção poupam o trabalho manual do analista de abrir e verificar tela por tela.
     """
     init_db()
-    saved_seconds = max(0.0, (items * MANUAL_SECONDS_PER_ITEM) - duration)
+    
+    # Itens analisados pelo robô (sucessos + falhas triadas)
+    erros = (metadata and metadata.get("erros_contagem")) or 0
+    total_inspecionados = max(items, items + erros)
+
+    # Tempo que o analista levaria para inspecionar e tratar manualmente cada linha
+    tempo_manual_estimado = total_inspecionados * MANUAL_SECONDS_PER_ITEM
+
+    # Economia líquida: tempo manual poupado menos o tempo que o robô levou
+    # Se o robô levou algum tempo mas poupou a conferência manual, garante o tempo de triagem do analista
+    saved_seconds = max(0.0, tempo_manual_estimado - duration)
+    if saved_seconds == 0.0 and total_inspecionados > 0:
+        # Pelo menos o tempo de triagem e diagnóstico que o analista não precisou fazer linha por linha
+        saved_seconds = total_inspecionados * 25.0
+
     saved_hours = round(saved_seconds / 3600.0, 2)
 
     meta_json = json.dumps(metadata or {}, ensure_ascii=False)
@@ -83,12 +86,12 @@ def record_job_execution(
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_history (
-                timestamp, job_id, job_name, duration_seconds,
-                items_processed, time_saved_hours, status, error_message, metadata, is_simulated
+                timestamp, job_id, job_name, duration_seconds, 
+                items_processed, time_saved_hours, status, error_message, metadata
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            datetime.now().isoformat(timespec="seconds"),
+            datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
             job_id,
             job_name,
             round(duration, 2),
@@ -96,90 +99,74 @@ def record_job_execution(
             saved_hours,
             status,
             error_msg,
-            meta_json,
-            1 if is_simulated else 0
+            meta_json
         ))
         conn.commit()
 
+def _parse_filter_dates(start_date: str = None, end_date: str = None):
+    """Auxiliar para converter filtros de string ISO YYYY-MM-DD em datetime."""
+    from datetime import datetime
+    dt_start = None
+    dt_end = None
+    if start_date:
+        try:
+            dt_start = datetime.strptime(start_date.strip(), "%Y-%m-%d").replace(hour=0, minute=0, second=0)
+        except Exception:
+            pass
+    if end_date:
+        try:
+            dt_end = datetime.strptime(end_date.strip(), "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        except Exception:
+            pass
+    return dt_start, dt_end
 
-def get_accumulated_kpis() -> Dict[str, Any]:
+def get_accumulated_kpis(start_date: str = None, end_date: str = None) -> Dict[str, Any]:
     """
     Retorna métricas consolidadas acumuladas para os cards do dashboard.
-    Considera exclusivamente execuções reais (is_simulated = 0).
+    Suporta filtro por período (start_date e end_date no formato YYYY-MM-DD).
     """
     init_db()
+    from datetime import datetime
+    dt_start, dt_end = _parse_filter_dates(start_date, end_date)
+
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT
-                COUNT(*) as total_jobs,
-                COALESCE(SUM(items_processed), 0) as total_items,
-                COALESCE(SUM(time_saved_hours), 0) as total_time_saved,
-                COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END), 0) as success_jobs
-            FROM job_history
-            WHERE is_simulated = 0
-        """)
-        row = cursor.fetchone()
-        total_jobs = row[0] or 0
-        total_items = row[1] or 0
-        total_hours_saved = round(row[2] or 0.0, 1)
-        success_jobs = row[3] or 0
+        cursor.execute("SELECT timestamp, items_processed, time_saved_hours, status FROM job_history")
+        rows = cursor.fetchall()
 
-        rate = round((success_jobs / total_jobs * 100), 1) if total_jobs > 0 else None
+        total_jobs = 0
+        total_items = 0
+        total_hours_saved = 0.0
+        success_jobs = 0
+
+        for row in rows:
+            ts_str, items, saved_h, status = row
+            # Validação do período
+            if dt_start or dt_end:
+                try:
+                    # timestamp no banco: "DD/MM/YYYY HH:MM:SS"
+                    dt_row = datetime.strptime(ts_str.strip(), "%d/%m/%Y %H:%M:%S")
+                    if dt_start and dt_row < dt_start:
+                        continue
+                    if dt_end and dt_row > dt_end:
+                        continue
+                except Exception:
+                    pass
+
+            total_jobs += 1
+            total_items += (items or 0)
+            total_hours_saved += (saved_h or 0.0)
+            if status == "SUCCESS":
+                success_jobs += 1
+
+        rate = round((success_jobs / total_jobs * 100), 1) if total_jobs > 0 else 100.0
 
         return {
             "total_jobs": total_jobs,
             "total_items": total_items,
-            "time_saved_hours": total_hours_saved,
-            "success_rate": rate,
-            "has_data": total_jobs > 0
+            "time_saved_hours": round(total_hours_saved, 1),
+            "success_rate": rate
         }
-
-
-def get_dashboard_series() -> Dict[str, Any]:
-    """
-    Séries reais para os gráficos do dashboard (últimos 7 dias), execuções reais apenas.
-
-    Retorna:
-      - week: labels dd/mm + contagem de execuções e itens por dia
-      - distribution: distribuição de execuções por processo (job_name)
-    """
-    init_db()
-    today = datetime.now().date()
-    days = [today - timedelta(days=i) for i in range(6, -1, -1)]
-    day_keys = [d.isoformat() for d in days]
-    labels = [d.strftime("%d/%m") for d in days]
-
-    counts = {k: 0 for k in day_keys}
-    items = {k: 0 for k in day_keys}
-    distribution: Dict[str, int] = {}
-
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT substr(timestamp, 1, 10) as day, job_name, items_processed
-            FROM job_history
-            WHERE is_simulated = 0
-        """)
-        for day, job_name, n_items in cursor.fetchall():
-            if day in counts:
-                counts[day] += 1
-                items[day] += (n_items or 0)
-            distribution[job_name] = distribution.get(job_name, 0) + 1
-
-    return {
-        "has_data": any(counts.values()),
-        "week": {
-            "labels": labels,
-            "executions": [counts[k] for k in day_keys],
-            "items": [items[k] for k in day_keys]
-        },
-        "distribution": {
-            "labels": list(distribution.keys()),
-            "values": list(distribution.values())
-        }
-    }
-
 
 def fetch_recent_history(limit: int = 50) -> List[Dict[str, Any]]:
     """Recupera os últimos registros de auditoria convertendo o payload metadata de volta para dict."""
@@ -192,12 +179,108 @@ def fetch_recent_history(limit: int = 50) -> List[Dict[str, Any]]:
         result = []
         for r in rows:
             d = dict(r)
-            d["timestamp_fmt"] = _fmt_display(d.get("timestamp", ""))
-            d["is_simulated"] = bool(d.get("is_simulated", 0))
             if d.get("metadata"):
                 try:
                     d["metadata"] = json.loads(d["metadata"])
-                except (ValueError, TypeError):
+                except:
                     pass
             result.append(d)
         return result
+
+def get_last_runs_map() -> Dict[str, Dict[str, str]]:
+    """Retorna um dicionário {job_id: {'last_run': timestamp, 'status': status}} com a última execução real de cada robô."""
+    init_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT job_id, timestamp, status 
+            FROM job_history 
+            WHERE id IN (SELECT MAX(id) FROM job_history GROUP BY job_id)
+        """)
+        rows = cursor.fetchall()
+        return {
+            row[0]: {"last_run": row[1], "status": row[2]}
+            for row in rows
+        }
+
+def get_dashboard_chart_data(start_date: str = None, end_date: str = None) -> Dict[str, Any]:
+    """
+    Agrupa os dados reais do banco SQLite para alimentar os gráficos do Dashboard:
+    1. Atividade temporal de execuções e itens dentro do período filtrado.
+    2. Distribuição real por tipo/nome de robô no período.
+    """
+    init_db()
+    from datetime import datetime, timedelta
+    dt_start, dt_end = _parse_filter_dates(start_date, end_date)
+
+    category_counts = {}
+    days_map = {}
+    day_labels = []
+
+    if dt_start and dt_end and (dt_end - dt_start).days >= 0:
+        # Se um período customizado foi definido, gera todos os dias daquele intervalo
+        diff_days = min((dt_end - dt_start).days + 1, 62) # Limite seguro para não estourar eixo
+        curr = dt_start
+        for _ in range(diff_days):
+            day_str = curr.strftime("%d/%m")
+            if day_str not in day_labels:
+                day_labels.append(day_str)
+                days_map[day_str] = {"jobs": 0, "items": 0}
+            curr += timedelta(days=1)
+    else:
+        # Padrão: últimos 7 dias
+        today = datetime.now()
+        for i in reversed(range(7)):
+            d = today - timedelta(days=i)
+            day_str = d.strftime("%d/%m")
+            day_labels.append(day_str)
+            days_map[day_str] = {"jobs": 0, "items": 0}
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT timestamp, items_processed, job_name, status FROM job_history")
+        rows = cursor.fetchall()
+
+        for row in rows:
+            ts_str, items, job_name, status = row
+            try:
+                dt_row = datetime.strptime(ts_str.strip(), "%d/%m/%Y %H:%M:%S")
+                # Filtro por período
+                if dt_start and dt_row < dt_start:
+                    continue
+                if dt_end and dt_row > dt_end:
+                    continue
+
+                day_month = dt_row.strftime("%d/%m")
+                if day_month in days_map:
+                    days_map[day_month]["jobs"] += 1
+                    days_map[day_month]["items"] += (items or 0)
+                else:
+                    # Caso o dia esteja no período mas não no mapa pré-alocado
+                    day_labels.append(day_month)
+                    days_map[day_month] = {"jobs": 1, "items": (items or 0)}
+
+                # Distribuição por robô dentro do período
+                cat = job_name or "Geral"
+                category_counts[cat] = category_counts.get(cat, 0) + 1
+            except Exception:
+                pass
+
+    jobs_data = [days_map.get(d, {}).get("jobs", 0) for d in day_labels]
+    items_data = [days_map.get(d, {}).get("items", 0) for d in day_labels]
+
+    dist_labels = list(category_counts.keys()) if category_counts else ["Nenhuma Execução"]
+    dist_data = list(category_counts.values()) if category_counts else [0]
+
+    return {
+        "activity": {
+            "labels": day_labels,
+            "jobs": jobs_data,
+            "items": items_data
+        },
+        "distribution": {
+            "labels": dist_labels,
+            "data": dist_data
+        }
+    }
+

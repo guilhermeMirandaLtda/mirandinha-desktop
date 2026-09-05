@@ -1,7 +1,6 @@
-pywebview>=5.0.0
+﻿pywebview>=5.0.0
 pandas>=2.0.0
 numpy>=1.24.0
 openpyxl>=3.1.0
+playwright>=1.40.0
 requests>=2.31.0
-# SAP GUI Scripting (Windows) — usado por core/rpa/tasks/sap_zerar_compromisso.py
-pywin32>=306 ; sys_platform == "win32"

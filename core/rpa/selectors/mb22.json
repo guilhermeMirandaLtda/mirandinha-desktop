@@ -1,0 +1,13 @@
+{
+  "transaction": "/nmb22",
+  "name": "Modificar Reserva (MB22)",
+  "version": "1.0",
+  "elements": {
+    "input_reserva": "wnd[0]/usr/ctxtRM07M-RSNUM",
+    "btn_select_item": "wnd[0]/tbar[1]/btn[20]",
+    "input_item_popup": "wnd[1]/usr/txtRM07M-RSPOS",
+    "chk_eliminar": "wnd[0]/usr/chkRESB-XLOEK",
+    "btn_save": "wnd[0]/tbar[0]/btn[11]",
+    "statusbar": "wnd[0]/sbar"
+  }
+}

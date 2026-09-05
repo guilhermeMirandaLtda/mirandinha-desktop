@@ -8,6 +8,10 @@ env/
 # Banco de histórico local (gerado em runtime)
 mirandinha_history.db
 
+# Build/dist do PyInstaller
+build/
+dist/
+
 .DS_Store
 Thumbs.db
 .idea/

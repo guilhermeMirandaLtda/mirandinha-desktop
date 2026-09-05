@@ -8,8 +8,12 @@ import webview
 from core.bridge import MirandinhaBridge
 
 def main():
-    # Caminho absoluto da pasta da interface web
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # Caminho absoluto da pasta da interface web (suporte a execução local e empacotada com PyInstaller)
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        base_dir = sys._MEIPASS
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
     web_dir = os.path.join(base_dir, "web")
     index_html = os.path.join(web_dir, "index.html")
 
@@ -21,7 +25,7 @@ def main():
 
     # Criação da janela desktop nativa
     window = webview.create_window(
-        title="Mirandinha — RPA & Análises Avançadas",
+        title="Mirandinha v3.0.4 — RPA & Análises Avançadas",
         url=index_html,
         js_api=bridge,
         width=1280,
