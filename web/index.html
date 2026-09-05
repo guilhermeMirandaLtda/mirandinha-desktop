@@ -344,78 +344,83 @@
 
         <!-- VIEW: STUDIO -->
         <section id="view-studio" class="view-section">
-          <div class="card-panel">
+
+          <!-- GALERIA: lista de exemplos e fluxos salvos, ponto de entrada -->
+          <div class="card-panel" id="studio-gallery-view">
             <div class="card-header-flex">
               <div>
                 <span class="card-title">Studio — editor visual de automações</span>
-                <p style="font-size: 13px; color: var(--ink-muted); margin-top: 4px;">Monte, veja e execute fluxos sem escrever código. Cada bloco chama uma atividade — nenhum id do SAP GUI aparece aqui.</p>
+                <p style="font-size: 13px; color: var(--ink-muted); margin-top: 4px;">Escolha um exemplo ou um fluxo seu para abrir no editor. Cada bloco chama uma atividade — nenhum id do SAP GUI aparece aqui.</p>
               </div>
             </div>
-
-            <div class="studio-toolbar">
-              <span class="studio-flow-title">
-                <i class="ri-share-forward-line" style="color: var(--brand-primary);"></i>
-                <span id="studio-flow-name">Nenhum fluxo carregado</span>
-                <span class="mono" id="studio-flow-id"></span>
-              </span>
-              <span class="studio-item-counter" id="studio-item-counter" style="display:none;"></span>
-              <span class="studio-chip" id="studio-publish-status" style="display:none;"></span>
-              <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.validateCurrentFlow()">
-                <i class="ri-shield-check-line"></i> Validar
-              </button>
-              <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.saveCurrentFlow()">
-                <i class="ri-save-3-line"></i> Salvar
-              </button>
-              <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" id="studio-publish-btn" onclick="window.studioBridge.publishCurrentFlow()">
-                <i class="ri-rocket-2-line"></i> Publicar
-              </button>
-              <button class="btn btn-primary" style="padding: 7px 16px; font-size: 12.5px;" id="studio-run-btn" onclick="window.studioBridge.runCurrentFlow()">
-                <i class="ri-play-circle-line"></i> Executar
-              </button>
-            </div>
-
-            <div class="studio-layout">
-              <!-- Painel esquerdo: exemplos e fluxos salvos -->
-              <div class="studio-panel">
-                <div class="studio-panel-header">Exemplos</div>
-                <div id="studio-samples-list"><div class="studio-source-empty">Carregando...</div></div>
-                <div class="studio-panel-header">Meus fluxos</div>
-                <div id="studio-flows-list"><div class="studio-source-empty">Nenhum fluxo salvo ainda.</div></div>
-              </div>
-
-              <!-- Canvas central -->
-              <div class="studio-canvas-wrap">
-                <div id="studio-drawflow"></div>
-                <div class="studio-canvas-empty" id="studio-canvas-empty">
-                  <i class="ri-node-tree"></i>
-                  <span>Escolha um exemplo à esquerda para ver o fluxo no canvas.</span>
-                </div>
-              </div>
-
-              <!-- Painel direito: inspetor -->
-              <div class="studio-panel">
-                <div class="studio-panel-header">Inspetor</div>
-                <div id="studio-inspector"><div class="studio-inspector-empty">Clique num bloco do canvas para ver os detalhes.</div></div>
-              </div>
+            <div class="studio-gallery-grid" id="studio-gallery-grid">
+              <div class="studio-source-empty">Carregando...</div>
             </div>
           </div>
 
-          <!-- Console de Execução do Studio ao Vivo -->
-          <div class="card-panel">
-            <div class="card-header-flex">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <i class="ri-terminal-box-line" style="font-size: 20px; color: var(--brand-primary);"></i>
-                <span class="card-title">Console do Studio</span>
+          <!-- EDITOR: canvas + inspetor + console, só o fluxo escolhido -->
+          <div id="studio-editor-view" style="display:none;">
+            <div class="card-panel">
+              <div class="studio-toolbar">
+                <button class="btn btn-outline" style="padding: 7px 12px; font-size: 12.5px;" onclick="window.studioBridge.showGallery()">
+                  <i class="ri-arrow-left-line"></i> Fluxos
+                </button>
+                <span class="studio-flow-title">
+                  <i class="ri-share-forward-line" style="color: var(--brand-primary);"></i>
+                  <span id="studio-flow-name">Nenhum fluxo carregado</span>
+                  <span class="mono" id="studio-flow-id"></span>
+                </span>
+                <span class="studio-item-counter" id="studio-item-counter" style="display:none;"></span>
+                <span class="studio-chip" id="studio-publish-status" style="display:none;"></span>
+                <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.validateCurrentFlow()">
+                  <i class="ri-shield-check-line"></i> Validar
+                </button>
+                <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.saveCurrentFlow()">
+                  <i class="ri-save-3-line"></i> Salvar
+                </button>
+                <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" id="studio-publish-btn" onclick="window.studioBridge.publishCurrentFlow()">
+                  <i class="ri-rocket-2-line"></i> Publicar
+                </button>
+                <button class="btn btn-primary" style="padding: 7px 16px; font-size: 12.5px;" id="studio-run-btn" onclick="window.studioBridge.runCurrentFlow()">
+                  <i class="ri-play-circle-line"></i> Executar
+                </button>
               </div>
-              <button class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick="window.studioBridge.clearConsole()">
-                <i class="ri-delete-bin-line"></i> Limpar
-              </button>
+
+              <div class="studio-layout">
+                <!-- Canvas -->
+                <div class="studio-canvas-wrap">
+                  <div id="studio-drawflow"></div>
+                  <div class="studio-canvas-empty" id="studio-canvas-empty">
+                    <i class="ri-node-tree"></i>
+                    <span>Carregando o fluxo...</span>
+                  </div>
+                </div>
+
+                <!-- Inspetor -->
+                <div class="studio-panel">
+                  <div class="studio-panel-header">Inspetor</div>
+                  <div id="studio-inspector"><div class="studio-inspector-empty">Clique num bloco do canvas para ver os detalhes.</div></div>
+                </div>
+              </div>
             </div>
-            <div class="progress-track-bar" id="studio-progress-track" style="display:none; margin-bottom: 12px;">
-              <div class="progress-fill-bar" id="studio-progress-fill"></div>
-            </div>
-            <div class="console-box" id="studio-console-output">
-              <div class="log-line"><span class="log-time">[00:00:00]</span><span class="log-info">[STUDIO]</span> Aguardando um fluxo para executar...</div>
+
+            <!-- Console de Execução do Studio ao Vivo -->
+            <div class="card-panel">
+              <div class="card-header-flex">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <i class="ri-terminal-box-line" style="font-size: 20px; color: var(--brand-primary);"></i>
+                  <span class="card-title">Console do Studio</span>
+                </div>
+                <button class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick="window.studioBridge.clearConsole()">
+                  <i class="ri-delete-bin-line"></i> Limpar
+                </button>
+              </div>
+              <div class="progress-track-bar" id="studio-progress-track" style="display:none; margin-bottom: 12px;">
+                <div class="progress-fill-bar" id="studio-progress-fill"></div>
+              </div>
+              <div class="console-box" id="studio-console-output">
+                <div class="log-line"><span class="log-time">[00:00:00]</span><span class="log-info">[STUDIO]</span> Aguardando um fluxo para executar...</div>
+              </div>
             </div>
           </div>
         </section>

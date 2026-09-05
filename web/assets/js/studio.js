@@ -38,29 +38,24 @@ window.studioBridge = {
   reverseIdMap: {},
   selectedNodeId: null,
   currentFlowMeta: null, // {is_published} — só existe quando a origem é 'flow' (já salvo)
-  _initialized: false,
+  _catalogLoaded: false,
+  _editorInitialized: false,
 
-  // ---- ciclo de vida da view ----
+  // ---- ciclo de vida da view: galeria (lista) <-> editor (canvas cheio) ----
 
   init: function() {
     if (!window.pywebview || !window.pywebview.api) {
-      const empty = document.getElementById('studio-canvas-empty');
-      if (empty) empty.innerHTML = '<i class="ri-error-warning-line"></i><span>O Studio precisa do aplicativo desktop rodando (pywebview) — não funciona numa aba de navegador solta.</span>';
+      const grid = document.getElementById('studio-gallery-grid');
+      if (grid) grid.innerHTML = '<div class="studio-source-empty"><i class="ri-error-warning-line"></i> O Studio precisa do aplicativo desktop rodando (pywebview) — não funciona numa aba de navegador solta.</div>';
       return;
     }
 
-    if (!this._initialized) {
-      this._initialized = true;
-      const container = document.getElementById('studio-drawflow');
-      this.editor = new Drawflow(container);
-      this.editor.reroute = true;
-      this.editor.start();
-      this.editor.on('nodeSelected', (id) => this.onNodeSelected(id));
-      this.editor.on('nodeUnselected', () => this.showInspectorEmpty());
+    if (!this._catalogLoaded) {
+      this._catalogLoaded = true;
       this.loadCatalog();
     }
 
-    this.loadSources();
+    this.showGallery();
   },
 
   loadCatalog: function() {
@@ -69,48 +64,91 @@ window.studioBridge = {
     });
   },
 
-  loadSources: function() {
-    window.pywebview.api.studio_list_samples().then(res => {
-      const container = document.getElementById('studio-samples-list');
-      if (!container) return;
-      if (!res.success || !res.data || res.data.length === 0) {
-        container.innerHTML = '<div class="studio-source-empty">Nenhum exemplo encontrado.</div>';
-        return;
-      }
-      container.innerHTML = res.data.map(s => `
-        <div class="studio-source-item" data-kind="sample" data-ref="${studioEscapeHtml(s.file)}"
-             onclick="window.studioBridge.selectSource('sample', '${studioEscapeHtml(s.file)}')">
-          <span class="name">${studioEscapeHtml(s.name)}</span>
-          <span class="meta">${studioEscapeHtml(s.transacao || 'sem transação')}</span>
-        </div>
-      `).join('');
-    });
+  // Ponto de entrada: uma tela só de fluxos escolhíveis — o canvas fica cheio pro fluxo
+  // aberto, sem uma coluna lateral disputando espaço com ele o tempo todo.
+  showGallery: function() {
+    const gallery = document.getElementById('studio-gallery-view');
+    const editor = document.getElementById('studio-editor-view');
+    if (editor) editor.style.display = 'none';
+    if (gallery) gallery.style.display = 'block';
+    this.renderGallery();
+  },
 
-    window.pywebview.api.studio_list_flows().then(res => {
-      const container = document.getElementById('studio-flows-list');
-      if (!container) return;
-      if (!res.success || !res.data || res.data.length === 0) {
-        container.innerHTML = '<div class="studio-source-empty">Nenhum fluxo salvo ainda.</div>';
-        return;
+  showEditor: function() {
+    const gallery = document.getElementById('studio-gallery-view');
+    const editor = document.getElementById('studio-editor-view');
+    if (gallery) gallery.style.display = 'none';
+    if (editor) editor.style.display = 'block';
+
+    // Drawflow precisa do container já visível (dimensões reais) — cria só na primeira
+    // vez que o editor realmente aparece, nunca enquanto ainda está com display:none.
+    if (!this._editorInitialized) {
+      this._editorInitialized = true;
+      const container = document.getElementById('studio-drawflow');
+      this.editor = new Drawflow(container);
+      this.editor.reroute = true;
+      this.editor.start();
+      this.editor.on('nodeSelected', (id) => this.onNodeSelected(id));
+      this.editor.on('nodeUnselected', () => this.showInspectorEmpty());
+    }
+  },
+
+  renderGallery: function() {
+    const container = document.getElementById('studio-gallery-grid');
+    if (!container) return;
+
+    Promise.all([
+      window.pywebview.api.studio_list_samples(),
+      window.pywebview.api.studio_list_flows()
+    ]).then(([samplesRes, flowsRes]) => {
+      let html = '';
+
+      if (samplesRes.success && samplesRes.data.length > 0) {
+        html += '<div class="studio-gallery-section-title">Exemplos</div>';
+        html += samplesRes.data.map(s => this.galleryCard({
+          kind: 'sample', ref: s.file, name: s.name,
+          meta: s.transacao || 'sem transação',
+          desc: s.description || 'Grafo de exemplo empacotado com o app.',
+          chipClass: 'brand', chipLabel: 'exemplo',
+        })).join('');
       }
-      container.innerHTML = res.data.map(f => `
-        <div class="studio-source-item" data-kind="flow" data-ref="${studioEscapeHtml(f.flow_id)}"
-             onclick="window.studioBridge.selectSource('flow', '${studioEscapeHtml(f.flow_id)}')">
-          <span class="name">${studioEscapeHtml(f.name)}</span>
-          <span class="meta">${f.is_published ? 'publicado' : 'rascunho'} · ${studioEscapeHtml(f.updated_at || '')}</span>
-        </div>
-      `).join('');
+
+      if (flowsRes.success && flowsRes.data.length > 0) {
+        html += '<div class="studio-gallery-section-title">Meus fluxos</div>';
+        html += flowsRes.data.map(f => this.galleryCard({
+          kind: 'flow', ref: f.flow_id, name: f.name,
+          meta: f.transacao || f.group_name || 'Studio',
+          desc: `Atualizado em ${f.updated_at || '—'}`,
+          chipClass: f.is_published ? 'success' : 'warn',
+          chipLabel: f.is_published ? 'publicado' : 'rascunho',
+        })).join('');
+      }
+
+      container.innerHTML = html || '<div class="studio-source-empty">Nenhum exemplo ou fluxo disponível ainda.</div>';
     });
+  },
+
+  galleryCard: function(opts) {
+    return `
+      <div class="studio-gallery-card" onclick="window.studioBridge.openFromGallery('${opts.kind}', '${studioEscapeHtml(opts.ref)}')">
+        <div class="studio-gallery-card-head">
+          <span class="studio-chip ${opts.chipClass}">${studioEscapeHtml(opts.chipLabel)}</span>
+          <span class="mono" style="font-size:10.5px;color:var(--ink-muted);">${studioEscapeHtml(opts.meta)}</span>
+        </div>
+        <div class="studio-gallery-card-name">${studioEscapeHtml(opts.name)}</div>
+        <div class="studio-gallery-card-desc">${studioEscapeHtml(opts.desc)}</div>
+      </div>
+    `;
+  },
+
+  openFromGallery: function(kind, ref) {
+    this.showEditor(); // primeiro garante o container visível e o editor criado
+    this.selectSource(kind, ref);
   },
 
   // ---- carregar um fluxo no canvas ----
 
   selectSource: function(kind, ref) {
-    document.querySelectorAll('.studio-source-item').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll(`.studio-source-item[data-kind="${kind}"]`).forEach(el => {
-      if (el.getAttribute('data-ref') === ref) el.classList.add('active');
-    });
-
     if (kind === 'sample') {
       window.pywebview.api.studio_load_sample(ref).then(res => {
         if (!res.success) {
@@ -325,7 +363,7 @@ window.studioBridge = {
         return;
       }
       window.appBridge.appendLog('SUCCESS', `Fluxo salvo: ${this.currentGraph.flow_id}`);
-      this.loadSources();
+      this.renderGallery();
     });
   },
 
@@ -352,7 +390,7 @@ window.studioBridge = {
         this.currentSource = { kind: 'flow', ref: flowId };
         this.currentFlowMeta = { is_published: true };
         this.renderPublishStatus();
-        this.loadSources();
+        this.renderGallery();
         if (typeof Swal !== 'undefined') {
           Swal.fire({ icon: 'success', title: 'Publicado!', text: 'O fluxo já aparece na Central de Robôs RPA.', confirmButtonColor: '#7A70BA' });
         }
