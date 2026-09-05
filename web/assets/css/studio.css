@@ -1,0 +1,257 @@
+/* ============================================================
+   Studio — editor visual de automações (Etapa 3)
+   Convenções herdadas de tokens.css / style.css. Cores de categoria de bloco seguem a
+   mesma matriz semântica do design system (brand/info/warning/success).
+   ============================================================ */
+
+.studio-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.studio-toolbar .studio-select {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-border);
+  background: var(--panel-bg);
+  color: var(--ink-primary);
+  font-family: var(--font-main);
+  font-size: 13px;
+  min-width: 260px;
+}
+.studio-toolbar .studio-flow-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink-primary);
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.studio-toolbar .studio-flow-title .mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+.studio-item-counter {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-secondary);
+  background: var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+}
+
+.studio-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr 300px;
+  gap: 14px;
+  height: 560px;
+}
+
+.studio-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--line-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.studio-panel-header {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* ---- Painel esquerdo: exemplos e fluxos salvos ---- */
+.studio-source-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--line-soft);
+  transition: background 0.15s ease;
+}
+.studio-source-item:hover { background: var(--line-soft); }
+.studio-source-item.active { background: var(--brand-primary-light); }
+.studio-source-item .name { font-size: 12.5px; font-weight: 600; color: var(--ink-primary); }
+.studio-source-item .meta { font-size: 10.5px; color: var(--ink-muted); font-family: var(--font-mono); }
+.studio-source-empty { padding: 14px; font-size: 12px; color: var(--ink-muted); }
+
+/* ---- Canvas central ---- */
+.studio-canvas-wrap {
+  position: relative;
+  border: 1px solid var(--line-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-body);
+  box-shadow: var(--shadow-card);
+}
+#studio-drawflow {
+  width: 100%;
+  height: 100%;
+}
+.studio-canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+  pointer-events: none;
+}
+.studio-canvas-empty i { font-size: 34px; opacity: 0.6; }
+
+/* ---- Nós do Drawflow — reset total do visual padrão da lib ---- */
+.drawflow .drawflow-node {
+  background: var(--panel-bg);
+  border: 1.6px solid var(--line-border);
+  border-radius: 8px;
+  color: var(--ink-primary);
+  width: 190px;
+  min-height: 44px;
+  padding: 9px 12px;
+  box-shadow: var(--shadow-card);
+}
+.drawflow .drawflow-node.selected {
+  background: var(--panel-bg);
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-primary-light);
+}
+.drawflow .drawflow-node .input,
+.drawflow .drawflow-node .output {
+  width: 12px; height: 12px;
+  background: var(--panel-bg);
+  border: 2px solid var(--ink-muted);
+}
+.drawflow .drawflow-node .input { left: -19px; }
+.drawflow .drawflow-node .output { right: -3px; }
+.drawflow .connection .main-path { stroke: var(--ink-muted); stroke-width: 2.2px; }
+.drawflow .connection .main-path:hover { stroke: var(--brand-secondary); }
+
+.df-node-inner { width: 100%; }
+.df-node-type {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  opacity: 0.72;
+  margin-bottom: 2px;
+}
+.df-node-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+/* Categoria por cor — mesma matriz semântica do plano técnico */
+.drawflow-node.df-cat-sessao   { background: var(--brand-primary-light); border-color: var(--brand-primary); }
+.drawflow-node.df-cat-tela     { background: var(--color-info-bg);       border-color: var(--color-info); }
+.drawflow-node.df-cat-grid     { background: var(--color-info-bg);       border-color: var(--color-info); }
+.drawflow-node.df-cat-robustez { background: var(--color-warning-bg);    border-color: var(--color-warning); }
+.drawflow-node.df-cat-logica   { background: var(--color-success-bg);    border-color: var(--color-success); }
+.drawflow-node.df-cat-dados    { background: var(--color-success-bg);    border-color: var(--color-success); }
+
+/* ---- Trace ao vivo — sobrepõe a cor de categoria com o estado de execução ---- */
+@keyframes studioPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(182, 122, 30, 0.45); }
+  50% { box-shadow: 0 0 0 7px rgba(182, 122, 30, 0); }
+}
+.drawflow-node.trace-running {
+  border-color: var(--color-warning) !important;
+  animation: studioPulse 1s ease-in-out infinite;
+}
+.drawflow-node.trace-done {
+  border-color: var(--color-success) !important;
+  box-shadow: 0 0 0 3px var(--color-success-bg);
+}
+.drawflow-node.trace-error {
+  border-color: var(--color-danger) !important;
+  box-shadow: 0 0 0 3px var(--color-danger-bg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawflow-node.trace-running { animation: none; }
+}
+
+/* ---- Painel direito: inspetor ---- */
+.studio-inspector { padding: 14px; font-size: 12.5px; }
+.studio-inspector-empty { padding: 14px; font-size: 12px; color: var(--ink-muted); }
+.studio-inspector-row { margin-bottom: 12px; }
+.studio-inspector-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 3px;
+}
+.studio-inspector-value {
+  color: var(--ink-primary);
+  font-size: 13px;
+  word-break: break-word;
+}
+.studio-inspector-value.mono { font-family: var(--font-mono); font-size: 11.5px; }
+.studio-param-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.studio-param-table td {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 11.5px;
+  vertical-align: top;
+}
+.studio-param-table td:first-child {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  padding-right: 10px;
+  width: 1%;
+}
+.studio-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+}
+.studio-chip.brand   { background: var(--brand-primary-light); color: var(--brand-primary); border-color: var(--brand-primary); }
+.studio-chip.info    { background: var(--color-info-bg);       color: var(--color-info);    border-color: var(--color-info); }
+.studio-chip.warn    { background: var(--color-warning-bg);    color: var(--color-warning); border-color: var(--color-warning); }
+.studio-chip.danger  { background: var(--color-danger-bg);     color: var(--color-danger);  border-color: var(--color-danger); }
+.studio-chip.success { background: var(--color-success-bg);    color: var(--color-success); border-color: var(--color-success); }
+
+/* ---- Painel de validação ---- */
+.studio-validation-list { list-style: none; margin: 0; padding: 0; max-height: 160px; overflow-y: auto; }
+.studio-validation-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 12px;
+}
+.studio-validation-item .tag { flex: none; }
+.studio-validation-item .msg { color: var(--ink-secondary); }
+.studio-validation-item .node { font-family: var(--font-mono); color: var(--ink-muted); }
+
+@media (max-width: 1100px) {
+  .studio-layout { grid-template-columns: 1fr; height: auto; }
+  .studio-canvas-wrap { height: 420px; }
+  .studio-panel { max-height: 220px; }
+}

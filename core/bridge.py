@@ -4,6 +4,7 @@ Aplica padronização estrita de resposta (caminho feliz e erro), telemetria de 
 """
 import webview
 import traceback
+import json
 from typing import Any, Dict
 from core.rpa.runner import RPARunner
 from core.analytics.engine import AnalyticsEngine
@@ -32,7 +33,8 @@ class MirandinhaBridge:
         self._window = None
         self.rpa_runner = RPARunner(
             log_callback=self._emit_log,
-            progress_callback=self._emit_progress
+            progress_callback=self._emit_progress,
+            trace_callback=self._emit_trace
         )
         self.analytics_engine = AnalyticsEngine()
 
@@ -54,6 +56,17 @@ class MirandinhaBridge:
         if self._window:
             js_code = f"window.appBridge.updateProgress({current}, {total});"
             try:
+                self._window.evaluate_js(js_code)
+            except Exception:
+                pass
+
+    def _emit_trace(self, event: Dict[str, Any]):
+        """Emite um evento de trace (nó ou item) do GraphTask para o canvas do Studio pintar
+        ao vivo. json.dumps() é seguro aqui: o payload é sempre str/int/float/None."""
+        if self._window:
+            try:
+                payload = json.dumps(event, ensure_ascii=False)
+                js_code = f"window.studioBridge && window.studioBridge.onTraceEvent({payload});"
                 self._window.evaluate_js(js_code)
             except Exception:
                 pass
@@ -271,5 +284,123 @@ class MirandinhaBridge:
             return success_response({"copied": True, "chars": len(text)})
         except Exception as e:
             return error_response("CLIPBOARD_ERROR", f"Falha ao copiar para área de transferência: {str(e)}")
+
+    # ================================================================
+    # Módulo Studio (Etapa 3) — catálogo, biblioteca de telas, fluxos e execução
+    # ================================================================
+
+    def studio_node_catalog(self) -> Dict[str, Any]:
+        """O Python é a autoridade única sobre os tipos de bloco — o canvas nunca declara
+        tipo por conta própria, só consulta isto."""
+        try:
+            from core.studio.node_catalog import get_node_catalog
+            return success_response(get_node_catalog())
+        except Exception as e:
+            return error_response("STUDIO_CATALOG_ERROR", "Falha ao carregar o catálogo de blocos.", str(e))
+
+    def studio_screen_packs(self) -> Dict[str, Any]:
+        """Resumo dos packs da Biblioteca de Telas — para o canvas listar."""
+        try:
+            from core.studio.screen_library import list_packs
+            return success_response(list_packs())
+        except Exception as e:
+            return error_response("STUDIO_PACKS_ERROR", "Falha ao carregar a Biblioteca de Telas.", str(e))
+
+    def studio_list_flows(self) -> Dict[str, Any]:
+        try:
+            from core.storage import list_studio_flows
+            return success_response(list_studio_flows())
+        except Exception as e:
+            return error_response("STUDIO_LIST_ERROR", "Falha ao listar os fluxos salvos.", str(e))
+
+    def studio_get_flow(self, flow_id: str) -> Dict[str, Any]:
+        try:
+            from core.storage import get_studio_flow
+            flow = get_studio_flow(flow_id)
+            if flow is None:
+                return error_response("FLOW_NOT_FOUND", f"Fluxo '{flow_id}' não encontrado.")
+            return success_response(flow)
+        except Exception as e:
+            return error_response("STUDIO_GET_ERROR", "Falha ao carregar o fluxo.", str(e))
+
+    def studio_validate_flow(self, graph: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            from core.studio.validator import validate_graph
+            return success_response(validate_graph(graph))
+        except Exception as e:
+            return error_response("STUDIO_VALIDATE_ERROR", "Falha ao validar o fluxo.", str(e))
+
+    def studio_save_flow(self, graph: Dict[str, Any], note: str = None) -> Dict[str, Any]:
+        """Salva um rascunho — não exige grafo válido (a validação obrigatória é do
+        portão de publicação, Etapa 5). Recusa enquanto um robô estiver em execução, pela
+        mesma razão que a Central de Robôs já recusa disparar dois de uma vez."""
+        try:
+            if getattr(self.rpa_runner, "_is_running", False):
+                return error_response("RPA_BUSY", "Não é possível salvar um fluxo enquanto uma automação está em execução.")
+
+            flow_id = (graph or {}).get("flow_id")
+            if not flow_id:
+                return error_response("FLOW_INVALID", "O grafo precisa de um 'flow_id'.")
+
+            from core.storage import save_studio_flow
+            result = save_studio_flow(
+                flow_id=flow_id,
+                name=graph.get("name", flow_id),
+                graph=graph,
+                group_name=graph.get("group"),
+                transacao=graph.get("transacao"),
+                schema_version=graph.get("schema_version", 1),
+                note=note,
+            )
+            return success_response(result)
+        except Exception as e:
+            return error_response("STUDIO_SAVE_ERROR", "Falha ao salvar o fluxo.", str(e))
+
+    def studio_list_samples(self) -> Dict[str, Any]:
+        """Grafos de exemplo empacotados com o app (core/studio/samples/) — ponto de
+        partida pra quem está conhecendo o Studio, sem precisar montar do zero nem editar
+        JSON à mão."""
+        try:
+            import os
+            samples_dir = os.path.join(os.path.dirname(__file__), "studio", "samples")
+            samples = []
+            for filename in sorted(os.listdir(samples_dir)):
+                if not filename.endswith(".json"):
+                    continue
+                path = os.path.join(samples_dir, filename)
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    samples.append({
+                        "file": filename,
+                        "name": data.get("name", filename),
+                        "transacao": data.get("transacao", ""),
+                        "description": data.get("description", ""),
+                    })
+                except Exception:
+                    continue
+            return success_response(samples)
+        except Exception as e:
+            return error_response("STUDIO_SAMPLES_ERROR", "Falha ao listar os exemplos.", str(e))
+
+    def studio_load_sample(self, filename: str) -> Dict[str, Any]:
+        try:
+            import os
+            samples_dir = os.path.join(os.path.dirname(__file__), "studio", "samples")
+            safe_name = os.path.basename(filename)  # sem travessia de diretório
+            path = os.path.join(samples_dir, safe_name)
+            if not os.path.exists(path):
+                return error_response("SAMPLE_NOT_FOUND", f"Exemplo '{safe_name}' não encontrado.")
+            with open(path, "r", encoding="utf-8") as f:
+                return success_response(json.load(f))
+        except Exception as e:
+            return error_response("STUDIO_SAMPLE_LOAD_ERROR", "Falha ao carregar o exemplo.", str(e))
+
+    def studio_run_flow(self, graph: Dict[str, Any], params: Dict[str, Any] = None) -> Dict[str, Any]:
+        try:
+            result = self.rpa_runner.execute_graph_sync(graph, params=params or {})
+            return success_response(result)
+        except Exception as e:
+            return error_response("STUDIO_EXECUTION_ERROR", f"Erro durante a execução do fluxo: {str(e)}", traceback.format_exc())
 
 

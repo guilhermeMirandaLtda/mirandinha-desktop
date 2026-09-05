@@ -84,9 +84,16 @@ AVAILABLE_JOBS = [
 ]
 
 class RPARunner:
-    def __init__(self, log_callback: Callable[[str, str], None] = None, progress_callback: Callable[[int, int], None] = None):
+    def __init__(
+        self,
+        log_callback: Callable[[str, str], None] = None,
+        progress_callback: Callable[[int, int], None] = None,
+        trace_callback: Callable[[Dict[str, Any]], None] = None,
+    ):
         self.log_callback = log_callback or (lambda level, msg: print(f"[{level}] {msg}"))
         self.progress_callback = progress_callback or (lambda cur, tot: None)
+        # Só usado por execute_graph_sync() (fluxos do Studio) — tasks nativas não emitem trace.
+        self.trace_callback = trace_callback or (lambda evt: None)
         self._cancel_requested = False
         self._is_running = False
 
@@ -348,6 +355,143 @@ class RPARunner:
                 "falha_etapa": "execucao"
             }
             # Grava no histórico com o total de itens já triados e as horas poupadas
+            record_job_execution(job_id, job_name, duration, total_parcial, "FAILED", err_msg, metadata=fail_meta)
+            raise exc
+        finally:
+            self._is_running = False
+
+    def execute_graph_sync(self, graph: Dict[str, Any], params: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Executa um fluxo do Studio (Etapa 3 — direto do canvas, sem passar pelo catálogo
+        de robôs; isso é trabalho da Etapa 5). Espelha execute_job_sync() de propósito —
+        mesma guarda de concorrência, mesmo shape de retorno, mesma gravação em
+        job_history — só troca 'qual task instanciar' e onde vêm os metadados de
+        governança (do grafo, não de AVAILABLE_JOBS).
+        """
+        from core.rpa.tasks.graph_task import GraphTask
+
+        params = params or {}
+        if self._is_running:
+            raise RuntimeError("Já existe uma automação em execução — aguarde terminar antes de rodar outro fluxo.")
+
+        self._cancel_requested = False
+        self._is_running = True
+
+        job_id = graph.get("flow_id", "flow_sem_id")
+        job_name = graph.get("name", "Fluxo do Studio")
+        transacao = graph.get("transacao", "AUTO")
+        modulo = graph.get("group", "Studio")
+
+        start_time = time.time()
+        start_datetime = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        self.log("INFO", f"Iniciando fluxo do Studio: {job_name}")
+
+        task_instance = None
+        try:
+            task_instance = GraphTask(
+                graph=graph,
+                params=params,
+                log_callback=self.log,
+                progress_callback=self.progress_callback,
+                cancel_check=self.is_cancelled,
+                trace_callback=self.trace_callback,
+            )
+            res = task_instance.run()
+
+            processed = res.get("processed", 0)
+            errors = res.get("errors", 0)
+            peps_falha = res.get("peps_com_falha", [])
+            is_cancelled = res.get("status") == "CANCELLED"
+
+            duration = time.time() - start_time
+            end_datetime = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            final_status = res.get("status", "SUCCESS")
+
+            if is_cancelled:
+                self.log("WARNING", f"Fluxo [{job_name}] interrompido. ({processed} itens em {duration:.1f}s)")
+                motivo_desc = "Cancelado pelo Operador"
+            else:
+                self.log("SUCCESS", f"Fluxo [{job_name}] finalizado com êxito! ({processed} itens em {duration:.1f}s)")
+                motivo_desc = "Concluído com Sucesso"
+
+            total_analisados = processed + errors
+            t_sucesso, t_erro = 45.0, 20.0  # sem calibração própria ainda — genérico, como robôs futuros
+            tempo_manual_estimado = (processed * t_sucesso) + (errors * t_erro)
+            horas_poupadas = max(0.0, tempo_manual_estimado - duration)
+            if horas_poupadas == 0.0 and total_analisados > 0:
+                horas_poupadas = (processed * (t_sucesso * 0.5)) + (errors * t_erro)
+
+            meta_payload = {
+                "job_version": res.get("job_version", "1"),
+                "engine_version": "3.0.4",
+                "transacao": transacao,
+                "modulo": modulo,
+                "tipo": "Studio / Grafo",
+                "data_inicio": start_datetime,
+                "data_fim": end_datetime,
+                "motivo_finalizacao": motivo_desc,
+                "tempo_manual_estimado_segundos": round(tempo_manual_estimado, 1),
+                "tempo_robo_segundos": round(duration, 2),
+                "horas_poupadas": round(horas_poupadas / 3600.0, 2),
+                "itens_concluidos": processed,
+                "erros_contagem": errors,
+                "total_itens_triados": total_analisados,
+                "peps_com_falha": peps_falha,
+                "origem": "studio",
+            }
+
+            record_job_execution(job_id, job_name, duration, total_analisados, final_status, metadata=meta_payload)
+            return {
+                "job_id": job_id,
+                "job_name": job_name,
+                "job_version": res.get("job_version", "1"),
+                "processed": processed,
+                "errors": errors,
+                "duration_seconds": round(duration, 2),
+                "status": final_status,
+                "metadata": meta_payload,
+                "peps_com_falha": peps_falha,
+            }
+        except Exception as exc:
+            duration = time.time() - start_time
+            end_datetime = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            err_msg = str(exc)
+            self.log("ERROR", f"Falha na execução do fluxo [{job_name}]: {err_msg}")
+
+            parcial_sucessos = getattr(task_instance, "sucessos", 0) if task_instance else 0
+            parcial_erros = getattr(task_instance, "erros", 0) if task_instance else 0
+            parcial_falhas = getattr(task_instance, "peps_com_falha", []) if task_instance else []
+            total_parcial = parcial_sucessos + parcial_erros
+
+            t_sucesso, t_erro = 45.0, 20.0
+            tempo_manual_estimado = (parcial_sucessos * t_sucesso) + (parcial_erros * t_erro)
+            horas_poupadas = max(0.0, tempo_manual_estimado - duration)
+            if horas_poupadas == 0.0 and total_parcial > 0:
+                horas_poupadas = (parcial_sucessos * (t_sucesso * 0.5)) + (parcial_erros * t_erro)
+
+            motivo_final = f"Interrompido por Erro / Falha: {err_msg}"
+            if self.is_cancelled():
+                motivo_final = f"Cancelado pelo Operador / Interrompido: {err_msg}"
+
+            fail_meta = {
+                "job_version": getattr(task_instance, "JOB_VERSION", "1") if task_instance else "1",
+                "engine_version": "3.0.4",
+                "transacao": transacao,
+                "modulo": modulo,
+                "tipo": "Studio / Grafo",
+                "data_inicio": start_datetime,
+                "data_fim": end_datetime,
+                "motivo_finalizacao": motivo_final,
+                "tempo_manual_estimado_segundos": round(tempo_manual_estimado, 1),
+                "tempo_robo_segundos": round(duration, 2),
+                "horas_poupadas": round(horas_poupadas / 3600.0, 2),
+                "itens_concluidos": parcial_sucessos,
+                "erros_contagem": parcial_erros,
+                "total_itens_triados": total_parcial,
+                "peps_com_falha": parcial_falhas,
+                "falha_etapa": "execucao",
+                "origem": "studio",
+            }
             record_job_execution(job_id, job_name, duration, total_parcial, "FAILED", err_msg, metadata=fail_meta)
             raise exc
         finally:

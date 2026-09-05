@@ -64,6 +64,7 @@ class GraphTask(RPAJobBase):
         progress_callback: Optional[Callable[[int, int], None]] = None,
         cancel_check: Optional[Callable[[], bool]] = None,
         params: Optional[Dict[str, Any]] = None,
+        trace_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ):
         # Um nó com on_error="abort" dentro do CORPO DO LAÇO precisa poder derrubar o job
         # inteiro, não só o item corrente — RPAJobBase.run() só reconhece dois motivos pra
@@ -80,6 +81,15 @@ class GraphTask(RPAJobBase):
             cancel_check=self._is_cancelled,
         )
         self.graph = graph
+
+        # Trace ao vivo pro canvas (Etapa 3). Regra do plano contra o custo de 4000
+        # chamadas de evaluate_js num laço de 500 itens: detalhe nó a nó só nos 3
+        # primeiros itens; dali em diante, um evento de resumo por item, mais TODO erro,
+        # não importa o item. self._current_item_index = 0 cobre a fase de preparo (antes
+        # de qualquer item existir) — 0 <= 3 é sempre verdadeiro, então ela sempre traceia.
+        self._trace_callback = trace_callback or (lambda evt: None)
+        self._current_item_index = 0
+        self._current_item_total = 0
 
         # Governança dinâmica — sobrescreve os defaults da classe com o que o grafo declara.
         self.JOB_ID = graph.get("flow_id", "flow_sem_id")
@@ -191,11 +201,35 @@ class GraphTask(RPAJobBase):
         return items
 
     def process_item(self, item: Any, index: int, total: int):
-        if self._foreach_node is None:
-            self._run_chain(self._start_node["id"], "out", stop_types=("flow.end",))
-            return
-        self.ctx.item = item
-        self._run_chain(self._foreach_node["id"], "loop", stop_types=("flow.foreach", "flow.end"))
+        self._current_item_index = index
+        self._current_item_total = total
+        start_ts = time.time()
+
+        try:
+            if self._foreach_node is None:
+                self._run_chain(self._start_node["id"], "out", stop_types=("flow.end",))
+            else:
+                self.ctx.item = item
+                self._run_chain(self._foreach_node["id"], "loop", stop_types=("flow.foreach", "flow.end"))
+        except Exception as exc:
+            if index > 3:
+                self._emit_trace({
+                    "type": "item", "item_index": index, "total": total, "status": "error",
+                    "ms": round((time.time() - start_ts) * 1000), "message": str(exc),
+                })
+            raise
+        else:
+            if index > 3:
+                self._emit_trace({
+                    "type": "item", "item_index": index, "total": total, "status": "done",
+                    "ms": round((time.time() - start_ts) * 1000),
+                })
+
+    def _emit_trace(self, event: Dict[str, Any]):
+        try:
+            self._trace_callback(event)
+        except Exception:
+            pass  # o canvas nunca pode derrubar uma execução contra o SAP
 
     # ---- localização estrutural do laço (sem executar nada) ----
 
@@ -278,6 +312,8 @@ class GraphTask(RPAJobBase):
         Python (fora de um laço, na fase de preparo, onde qualquer falha aborta o job).
         """
         node_id, ntype = node["id"], node["type"]
+        item_idx, item_total = self._current_item_index, self._current_item_total
+        should_trace = item_idx <= 3  # além do 3º item, só erro (abaixo) ainda traceia
 
         if not is_implemented(ntype):
             raise RuntimeError(f"Nó '{node_id}' usa o tipo '{ntype}', ainda não implementado pelo runtime.")
@@ -286,13 +322,33 @@ class GraphTask(RPAJobBase):
             raise RuntimeError(f"Nenhum executor registrado para o tipo '{ntype}'.")
 
         self.log("DEBUG", f"[{node_id}] {node.get('label', ntype)}")
+        if should_trace:
+            self._emit_trace({
+                "type": "node", "node_id": node_id, "status": "running",
+                "item_index": item_idx, "total": item_total,
+            })
 
+        t0 = time.time()
         try:
             handler(node)
+            ms = round((time.time() - t0) * 1000)
+            if should_trace:
+                self._emit_trace({
+                    "type": "node", "node_id": node_id, "status": "done",
+                    "item_index": item_idx, "total": item_total, "ms": ms,
+                })
             return "out"
         except Exception as exc:
+            ms = round((time.time() - t0) * 1000)
             on_error = node.get("on_error", "abort")
             self.log("ERROR", f"Falha no nó '{node_id}' ({node.get('label', ntype)}): {exc}")
+
+            # Erro sempre traceia, mesmo além do 3º item — é justamente o que o operador
+            # quer ver ao vivo: onde quebrou.
+            self._emit_trace({
+                "type": "node", "node_id": node_id, "status": "error",
+                "item_index": item_idx, "total": item_total, "ms": ms, "message": str(exc),
+            })
 
             if on_error == "continue":
                 self.log("WARNING", f"[{node_id}] on_error='continue' — seguindo para o próximo nó.")

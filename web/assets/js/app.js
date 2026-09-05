@@ -20,6 +20,7 @@ window.appBridge = {
     const titles = {
       'view-dashboard': 'Visão Geral do Sistema',
       'view-rpa': 'Central de Automações Robóticas (RPA)',
+      'view-studio': 'Studio — Editor Visual de Automações',
       'view-analytics': 'Análises Avançadas & Diagnósticos',
       'view-history': 'Histórico & Auditoria de Processos',
       'view-settings': 'Configurações do Mirandinha'
@@ -35,6 +36,9 @@ window.appBridge = {
     }
     if (viewId === 'view-rpa') {
       this.loadJobsFromBackend();
+    }
+    if (viewId === 'view-studio' && window.studioBridge) {
+      window.studioBridge.init();
     }
   },
 
@@ -557,12 +561,20 @@ window.appBridge = {
     const progressPanel = document.getElementById('rpa-progress-panel');
     const fillEl = document.getElementById('progress-fill-element');
     const metaText = document.getElementById('progress-meta-text');
-    if (!progressPanel || !fillEl || !metaText) return;
-
-    progressPanel.classList.add('active');
     const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
-    fillEl.style.width = `${pct}%`;
-    metaText.innerText = `${current} / ${total} itens (${pct}%)`;
+
+    if (progressPanel && fillEl && metaText) {
+      progressPanel.classList.add('active');
+      fillEl.style.width = `${pct}%`;
+      metaText.innerText = `${current} / ${total} itens (${pct}%)`;
+    }
+
+    const studioTrack = document.getElementById('studio-progress-track');
+    const studioFill = document.getElementById('studio-progress-fill');
+    if (studioTrack && studioFill) {
+      studioTrack.style.display = 'block';
+      studioFill.style.width = `${pct}%`;
+    }
   },
 
   cancelCurrentJob: function() {
@@ -807,6 +819,15 @@ window.appBridge = {
     line.innerHTML = `<span class="log-time">[${timeStr}]</span><span class="${colorClass}">[${norm}]</span> ${message}`;
     consoleBox.appendChild(line);
     consoleBox.scrollTop = consoleBox.scrollHeight;
+
+    // O runner é o mesmo para robôs nativos e fluxos do Studio — espelha no console do
+    // Studio também, pra funcionar não importa qual view estiver ativa no momento.
+    const studioConsole = document.getElementById('studio-console-output');
+    if (studioConsole) {
+      const studioLine = line.cloneNode(true);
+      studioConsole.appendChild(studioLine);
+      studioConsole.scrollTop = studioConsole.scrollHeight;
+    }
   },
 
   clearLogs: function() {

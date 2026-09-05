@@ -17,8 +17,12 @@
   <!-- SweetAlert2 para confirmações e alertas visuais -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   
+  <!-- Drawflow: canvas de nós do Studio -->
+  <link rel="stylesheet" href="assets/vendor/drawflow/drawflow.min.css">
+
   <link rel="stylesheet" href="assets/css/tokens.css">
   <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/studio.css">
   <link rel="icon" type="image/x-icon" href="assets/img/mirandinha.ico">
 
 </head>
@@ -46,6 +50,10 @@
         <a class="nav-item" data-target="view-rpa">
           <i class="ri-robot-2-line"></i>
           <span>Central de Robôs RPA</span>
+        </a>
+        <a class="nav-item" data-target="view-studio">
+          <i class="ri-flow-chart"></i>
+          <span>Studio</span>
         </a>
         <a class="nav-item" data-target="view-analytics">
           <i class="ri-line-chart-line"></i>
@@ -334,6 +342,80 @@
           </div>
         </section>
 
+        <!-- VIEW: STUDIO -->
+        <section id="view-studio" class="view-section">
+          <div class="card-panel">
+            <div class="card-header-flex">
+              <div>
+                <span class="card-title">Studio — editor visual de automações</span>
+                <p style="font-size: 13px; color: var(--ink-muted); margin-top: 4px;">Monte, veja e execute fluxos sem escrever código. Cada bloco chama uma atividade — nenhum id do SAP GUI aparece aqui.</p>
+              </div>
+            </div>
+
+            <div class="studio-toolbar">
+              <span class="studio-flow-title">
+                <i class="ri-share-forward-line" style="color: var(--brand-primary);"></i>
+                <span id="studio-flow-name">Nenhum fluxo carregado</span>
+                <span class="mono" id="studio-flow-id"></span>
+              </span>
+              <span class="studio-item-counter" id="studio-item-counter" style="display:none;"></span>
+              <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.validateCurrentFlow()">
+                <i class="ri-shield-check-line"></i> Validar
+              </button>
+              <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.saveCurrentFlow()">
+                <i class="ri-save-3-line"></i> Salvar
+              </button>
+              <button class="btn btn-primary" style="padding: 7px 16px; font-size: 12.5px;" id="studio-run-btn" onclick="window.studioBridge.runCurrentFlow()">
+                <i class="ri-play-circle-line"></i> Executar
+              </button>
+            </div>
+
+            <div class="studio-layout">
+              <!-- Painel esquerdo: exemplos e fluxos salvos -->
+              <div class="studio-panel">
+                <div class="studio-panel-header">Exemplos</div>
+                <div id="studio-samples-list"><div class="studio-source-empty">Carregando...</div></div>
+                <div class="studio-panel-header">Meus fluxos</div>
+                <div id="studio-flows-list"><div class="studio-source-empty">Nenhum fluxo salvo ainda.</div></div>
+              </div>
+
+              <!-- Canvas central -->
+              <div class="studio-canvas-wrap">
+                <div id="studio-drawflow"></div>
+                <div class="studio-canvas-empty" id="studio-canvas-empty">
+                  <i class="ri-node-tree"></i>
+                  <span>Escolha um exemplo à esquerda para ver o fluxo no canvas.</span>
+                </div>
+              </div>
+
+              <!-- Painel direito: inspetor -->
+              <div class="studio-panel">
+                <div class="studio-panel-header">Inspetor</div>
+                <div id="studio-inspector"><div class="studio-inspector-empty">Clique num bloco do canvas para ver os detalhes.</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Console de Execução do Studio ao Vivo -->
+          <div class="card-panel">
+            <div class="card-header-flex">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <i class="ri-terminal-box-line" style="font-size: 20px; color: var(--brand-primary);"></i>
+                <span class="card-title">Console do Studio</span>
+              </div>
+              <button class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick="window.studioBridge.clearConsole()">
+                <i class="ri-delete-bin-line"></i> Limpar
+              </button>
+            </div>
+            <div class="progress-track-bar" id="studio-progress-track" style="display:none; margin-bottom: 12px;">
+              <div class="progress-fill-bar" id="studio-progress-fill"></div>
+            </div>
+            <div class="console-box" id="studio-console-output">
+              <div class="log-line"><span class="log-time">[00:00:00]</span><span class="log-info">[STUDIO]</span> Aguardando um fluxo para executar...</div>
+            </div>
+          </div>
+        </section>
+
         <!-- VIEW: ANÁLISES AVANÇADAS -->
         <section id="view-analytics" class="view-section">
           <div class="card-panel">
@@ -585,6 +667,8 @@
 
   <script src="assets/js/charts.js"></script>
   <script src="assets/js/app.js"></script>
+  <script src="assets/vendor/drawflow/drawflow.min.js"></script>
+  <script src="assets/js/studio.js"></script>
 </body>
 </html>
 
