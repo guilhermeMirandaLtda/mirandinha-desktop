@@ -4,7 +4,6 @@ None), então as chamadas de evaluate_js viram no-op — o que já é o comporta
 bridge quando não há frontend anexado. Cobre o contrato normativo {success, data, error}.
 """
 import unittest
-from unittest.mock import patch
 
 from core.bridge import MirandinhaBridge
 
@@ -88,7 +87,6 @@ class TestStudioSaveFlow(unittest.TestCase):
             "edges": [],
         }
 
-    @patch("core.storage.DB_PATH", ":memory:")
     def test_recusa_sem_flow_id(self):
         bridge = MirandinhaBridge()
         graph = self._graph()
