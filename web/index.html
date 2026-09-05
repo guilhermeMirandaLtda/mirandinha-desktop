@@ -359,11 +359,15 @@
                 <span class="mono" id="studio-flow-id"></span>
               </span>
               <span class="studio-item-counter" id="studio-item-counter" style="display:none;"></span>
+              <span class="studio-chip" id="studio-publish-status" style="display:none;"></span>
               <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.validateCurrentFlow()">
                 <i class="ri-shield-check-line"></i> Validar
               </button>
               <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.saveCurrentFlow()">
                 <i class="ri-save-3-line"></i> Salvar
+              </button>
+              <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" id="studio-publish-btn" onclick="window.studioBridge.publishCurrentFlow()">
+                <i class="ri-rocket-2-line"></i> Publicar
               </button>
               <button class="btn btn-primary" style="padding: 7px 16px; font-size: 12.5px;" id="studio-run-btn" onclick="window.studioBridge.runCurrentFlow()">
                 <i class="ri-play-circle-line"></i> Executar

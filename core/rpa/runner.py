@@ -106,10 +106,12 @@ class RPARunner:
         return self._cancel_requested
 
     def get_catalog(self) -> List[Dict[str, Any]]:
-        from core.storage import get_last_runs_map
+        """AVAILABLE_JOBS + os fluxos publicados no Studio, no mesmo shape — a Central de
+        Robôs não sabe (nem precisa saber) que um item veio do Studio."""
+        from core.storage import get_last_runs_map, list_published_flows
         last_runs = get_last_runs_map()
         catalog = []
-        for job in AVAILABLE_JOBS:
+        for job in AVAILABLE_JOBS + list_published_flows():
             j = dict(job)
             lr_info = last_runs.get(j["id"])
             if lr_info:
@@ -127,6 +129,13 @@ class RPARunner:
     def execute_job_sync(self, job_id: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """Executa a rotina do robô, mede o tempo e grava auditoria no banco."""
         params = params or {}
+
+        # Um fluxo publicado do Studio é só mais uma task do RPARunner — mesma decisão-
+        # âncora do plano técnico. execute_graph_sync() já tem sua própria guarda de
+        # concorrência e sua própria gravação em job_history, então delega e sai daqui.
+        if job_id.startswith("flow_"):
+            return self._execute_published_flow(job_id, params)
+
         self._cancel_requested = False
         self._is_running = True
         job_def = next((j for j in AVAILABLE_JOBS if j["id"] == job_id), None)
@@ -359,6 +368,21 @@ class RPARunner:
             raise exc
         finally:
             self._is_running = False
+
+    def _execute_published_flow(self, flow_id: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Carrega um fluxo do Studio pelo id e delega pra execute_graph_sync(). Só roda
+        se estiver publicado — um rascunho não fica um clique de distância de mexer no
+        SAP produtivo pela Central de Robôs; pra testar um rascunho, o caminho é o botão
+        [Executar] do próprio Studio (studio_run_flow), que não passa por aqui."""
+        from core.storage import get_studio_flow
+
+        flow = get_studio_flow(flow_id)
+        if flow is None:
+            raise ValueError(f"Fluxo '{flow_id}' não encontrado.")
+        if not flow.get("is_published"):
+            raise ValueError(f"Fluxo '{flow_id}' não está publicado — publique-o no Studio antes de rodar pela Central de Robôs.")
+
+        return self.execute_graph_sync(flow["graph"], params=params)
 
     def execute_graph_sync(self, graph: Dict[str, Any], params: Dict[str, Any] = None) -> Dict[str, Any]:
         """

@@ -332,8 +332,8 @@ class MirandinhaBridge:
 
     def studio_save_flow(self, graph: Dict[str, Any], note: str = None) -> Dict[str, Any]:
         """Salva um rascunho — não exige grafo válido (a validação obrigatória é do
-        portão de publicação, Etapa 5). Recusa enquanto um robô estiver em execução, pela
-        mesma razão que a Central de Robôs já recusa disparar dois de uma vez."""
+        portão de publicação, logo abaixo). Recusa enquanto um robô estiver em execução,
+        pela mesma razão que a Central de Robôs já recusa disparar dois de uma vez."""
         try:
             if getattr(self.rpa_runner, "_is_running", False):
                 return error_response("RPA_BUSY", "Não é possível salvar um fluxo enquanto uma automação está em execução.")
@@ -355,6 +355,44 @@ class MirandinhaBridge:
             return success_response(result)
         except Exception as e:
             return error_response("STUDIO_SAVE_ERROR", "Falha ao salvar o fluxo.", str(e))
+
+    def studio_publish_flow(self, flow_id: str, publish: bool = True) -> Dict[str, Any]:
+        """
+        O portão da Etapa 5: um fluxo publicado vira código executável contra o SAP
+        produtivo pelo botão [Iniciar] da Central de Robôs, então publicar exige grafo
+        válido (sem erro) e sem nenhum nó pendente de revisão. Despublicar (publish=False)
+        não passa por essa checagem — tirar de circulação é sempre seguro.
+        """
+        try:
+            if getattr(self.rpa_runner, "_is_running", False):
+                return error_response("RPA_BUSY", "Não é possível publicar um fluxo enquanto uma automação está em execução.")
+
+            from core.storage import get_studio_flow, set_studio_flow_published
+            flow = get_studio_flow(flow_id)
+            if flow is None:
+                return error_response("FLOW_NOT_FOUND", f"Fluxo '{flow_id}' não encontrado.")
+
+            if publish:
+                from core.studio.validator import validate_graph
+                result = validate_graph(flow["graph"])
+                errors = [i for i in result["issues"] if i["severity"] == "error"]
+                pending = [n["id"] for n in flow["graph"].get("nodes", []) if n.get("needs_review")]
+
+                if errors or pending:
+                    details = {
+                        "issues": result["issues"],
+                        "needs_review_node_ids": pending,
+                    }
+                    return error_response(
+                        "FLOW_INVALID",
+                        "O fluxo tem problemas que impedem a publicação — corrija e tente de novo.",
+                        json.dumps(details, ensure_ascii=False),
+                    )
+
+            updated = set_studio_flow_published(flow_id, publish)
+            return success_response(updated)
+        except Exception as e:
+            return error_response("STUDIO_PUBLISH_ERROR", "Falha ao publicar o fluxo.", str(e))
 
     def studio_list_samples(self) -> Dict[str, Any]:
         """Grafos de exemplo empacotados com o app (core/studio/samples/) — ponto de

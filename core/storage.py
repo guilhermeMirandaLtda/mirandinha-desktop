@@ -391,3 +391,57 @@ def list_studio_flows() -> List[Dict[str, Any]]:
         """)
         return [dict(r) for r in cursor.fetchall()]
 
+
+def set_studio_flow_published(flow_id: str, is_published: bool) -> Dict[str, Any]:
+    """Alterna o flag de publicação. Quem decide SE pode publicar (grafo válido, sem
+    needs_review, RPA_BUSY) é a bridge — esta função só grava o que já foi decidido."""
+    init_db()
+    now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE studio_flows SET is_published = ?, updated_at = ? WHERE flow_id = ?",
+            (1 if is_published else 0, now, flow_id)
+        )
+        if cursor.rowcount == 0:
+            raise ValueError(f"Fluxo '{flow_id}' não encontrado.")
+        conn.commit()
+    return {"flow_id": flow_id, "is_published": is_published, "updated_at": now}
+
+
+def list_published_flows() -> List[Dict[str, Any]]:
+    """
+    Fluxos publicados, no MESMO shape de AVAILABLE_JOBS (core/rpa/runner.py) — é isso que
+    permite RPARunner.get_catalog() devolver AVAILABLE_JOBS + list_published_flows() sem a
+    Central de Robôs mudar uma linha.
+    """
+    init_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM studio_flows WHERE is_published = 1 ORDER BY updated_at DESC")
+        rows = cursor.fetchall()
+
+    result = []
+    for row in rows:
+        d = dict(row)
+        graph = json.loads(d["graph_json"])
+        requires_file = any(n.get("type") == "data.excel_read" for n in graph.get("nodes", []))
+        result.append({
+            "id": d["flow_id"],
+            "group": d["group_name"] or graph.get("group", "Studio"),
+            "order": None,
+            "name": d["name"],
+            "type": f"Studio / {d['transacao'] or 'Grafo'}",
+            "requires_file": requires_file,
+            "description": graph.get("description") or "Fluxo criado no Studio pelo próprio usuário.",
+            "usage_steps": graph.get("usage_steps") or [
+                "Certifique-se de estar com o SAP Logon aberto e conectado na sessão desejada.",
+                "Clique em [Iniciar] para o Mirandinha executar o fluxo montado no Studio.",
+            ],
+            "last_run": "Nunca",
+            "status": "idle",
+            "is_studio_flow": True,
+        })
+    return result
+

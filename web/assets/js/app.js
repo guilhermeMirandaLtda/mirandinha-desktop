@@ -6,6 +6,20 @@ const appState = {
   history: []
 };
 
+// Desde que fluxos do Studio entraram no catálogo de robôs (Etapa 5), job.name/
+// job.type/usage_steps podem vir de texto que o próprio usuário escreveu no Studio —
+// deixaram de ser só as strings estáticas de AVAILABLE_JOBS. Usar sempre antes de
+// interpolar em innerHTML.
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 window.appBridge = {
   switchView: function(viewId) {
     document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
@@ -168,9 +182,9 @@ window.appBridge = {
         html += `
           <tr class="job-item-row group-child-${groupSlug}">
             <td style="font-weight: 600; color: var(--ink-primary); padding-left: 28px;">
-              ${itemNumber}${job.name}
+              ${itemNumber}${escapeHtml(job.name)}
             </td>
-            <td><span class="badge-tag idle">${job.type}</span></td>
+            <td><span class="badge-tag idle">${escapeHtml(job.type)}</span></td>
             <td>${job.last_run || 'Nunca'}</td>
             <td><span class="badge-tag ${job.status}" id="badge-${job.id}">${job.status === 'running' ? 'Executando...' : 'Pronto'}</span></td>
             <td style="text-align: right;">
@@ -306,7 +320,7 @@ window.appBridge = {
         stepsContainer.innerHTML = job.usage_steps.map((step, idx) => `
           <div class="step-item">
             <div class="step-number">${idx + 1}</div>
-            <div>${step}</div>
+            <div>${escapeHtml(step)}</div>
           </div>
         `).join('');
       } else {

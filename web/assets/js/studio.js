@@ -37,6 +37,7 @@ window.studioBridge = {
   idMap: {},
   reverseIdMap: {},
   selectedNodeId: null,
+  currentFlowMeta: null, // {is_published} — só existe quando a origem é 'flow' (já salvo)
   _initialized: false,
 
   // ---- ciclo de vida da view ----
@@ -110,18 +111,47 @@ window.studioBridge = {
       if (el.getAttribute('data-ref') === ref) el.classList.add('active');
     });
 
-    const loadPromise = kind === 'sample'
-      ? window.pywebview.api.studio_load_sample(ref)
-      : window.pywebview.api.studio_get_flow(ref).then(res => res.success ? { success: true, data: res.data.graph } : res);
+    if (kind === 'sample') {
+      window.pywebview.api.studio_load_sample(ref).then(res => {
+        if (!res.success) {
+          window.appBridge.appendLog('ERROR', `Falha ao carregar exemplo: ${res.error.message}`);
+          return;
+        }
+        this.currentSource = { kind: kind, ref: ref };
+        this.currentFlowMeta = null; // exemplo ainda não foi salvo — sem status de publicação
+        this.loadGraphIntoCanvas(res.data);
+        this.renderPublishStatus();
+      });
+      return;
+    }
 
-    loadPromise.then(res => {
+    window.pywebview.api.studio_get_flow(ref).then(res => {
       if (!res.success) {
-        window.appBridge.appendLog('ERROR', `Falha ao carregar fluxo: ${res.error ? res.error.message : 'erro desconhecido'}`);
+        window.appBridge.appendLog('ERROR', `Falha ao carregar fluxo: ${res.error.message}`);
         return;
       }
       this.currentSource = { kind: kind, ref: ref };
-      this.loadGraphIntoCanvas(res.data);
+      this.currentFlowMeta = { is_published: !!res.data.is_published };
+      this.loadGraphIntoCanvas(res.data.graph);
+      this.renderPublishStatus();
     });
+  },
+
+  renderPublishStatus: function() {
+    const el = document.getElementById('studio-publish-status');
+    if (!el) return;
+    if (!this.currentFlowMeta) {
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = 'inline-block';
+    if (this.currentFlowMeta.is_published) {
+      el.className = 'studio-chip success';
+      el.innerText = 'publicado';
+    } else {
+      el.className = 'studio-chip warn';
+      el.innerText = 'rascunho';
+    }
   },
 
   loadGraphIntoCanvas: function(graph) {
@@ -296,6 +326,37 @@ window.studioBridge = {
       }
       window.appBridge.appendLog('SUCCESS', `Fluxo salvo: ${this.currentGraph.flow_id}`);
       this.loadSources();
+    });
+  },
+
+  publishCurrentFlow: function() {
+    if (!this.currentGraph) { this._noFlowWarning(); return; }
+    const flowId = this.currentGraph.flow_id;
+
+    // Publicar sempre salva primeiro — garante que o que vira código executável é
+    // exatamente o que está no canvas neste momento, não uma versão anterior no banco.
+    window.pywebview.api.studio_save_flow(this.currentGraph).then(saveRes => {
+      if (!saveRes.success) {
+        window.appBridge.appendLog('ERROR', `Falha ao salvar antes de publicar: ${saveRes.error.message}`);
+        return;
+      }
+      window.pywebview.api.studio_publish_flow(flowId, true).then(res => {
+        if (!res.success) {
+          window.appBridge.appendLog('ERROR', `Não foi possível publicar: ${res.error.message}`);
+          if (typeof Swal !== 'undefined') {
+            Swal.fire('Não foi possível publicar', res.error.message || 'O fluxo tem problemas de validação.', 'error');
+          }
+          return;
+        }
+        window.appBridge.appendLog('SUCCESS', `Fluxo publicado: ${flowId} — já aparece na Central de Robôs.`);
+        this.currentSource = { kind: 'flow', ref: flowId };
+        this.currentFlowMeta = { is_published: true };
+        this.renderPublishStatus();
+        this.loadSources();
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({ icon: 'success', title: 'Publicado!', text: 'O fluxo já aparece na Central de Robôs RPA.', confirmButtonColor: '#7A70BA' });
+        }
+      });
     });
   },
 
