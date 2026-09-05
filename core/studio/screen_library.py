@@ -82,3 +82,69 @@ def list_elements(pack_name: str, tipo: str = None) -> List[Dict[str, Any]]:
             continue
         result.append({"ref": ref, **el})
     return result
+
+
+# ================================================================
+# Compartilhamento (Etapa 6) — o .mirflow.json precisa ser auto-contido: quem recebe
+# pode não ter os packs que o grafo referencia (ex.: alguém do time de compras nunca
+# instalou o pack 'cn52n'). Sem empacotar os packs junto, o fluxo chega quebrado.
+# ================================================================
+
+def _walk_targets(value: Any):
+    """Percorre recursivamente um valor (nó, params, listas aninhadas...) e produz cada
+    referência de tela {"pack": ..., "ref": ...} encontrada dentro dele."""
+    if isinstance(value, dict):
+        if isinstance(value.get("pack"), str) and isinstance(value.get("ref"), str):
+            yield value
+        for v in value.values():
+            yield from _walk_targets(v)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk_targets(item)
+
+
+def list_referenced_packs(graph: Dict[str, Any]) -> List[str]:
+    """Todos os packs que os nós do grafo referenciam — é o que o export empacota junto."""
+    packs = set()
+    for node in graph.get("nodes", []):
+        for target in _walk_targets(node.get("params", {})):
+            packs.add(target["pack"])
+    return sorted(packs)
+
+
+def export_bundle(graph: Dict[str, Any]) -> Dict[str, Any]:
+    """Monta o .mirflow.json: o grafo + os packs que ele referencia, cada um por inteiro
+    (não só os elementos usados — mais simples e mais robusto a uso futuro do mesmo pack)."""
+    from datetime import datetime
+
+    packs: Dict[str, Any] = {}
+    for pack_name in list_referenced_packs(graph):
+        try:
+            packs[pack_name] = get_pack(pack_name)
+        except FileNotFoundError:
+            continue  # referenciado mas não instalado localmente — nada pra empacotar
+
+    return {
+        "mirflow_version": 1,
+        "exported_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "graph": graph,
+        "packs": packs,
+    }
+
+
+def import_bundle_packs(bundle: Dict[str, Any]) -> List[str]:
+    """
+    Instala em disco os packs do bundle que ainda NÃO existem localmente. Nunca sobrescreve
+    um pack já instalado — o pack local é sempre a autoridade (pode ter sido corrigido ou
+    ganho fallbacks depois da versão que foi exportada). Retorna os packs que foram
+    efetivamente instalados agora.
+    """
+    installed = []
+    for pack_name, pack_data in (bundle.get("packs") or {}).items():
+        path = _pack_path(pack_name)
+        if path.exists():
+            continue
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(pack_data, f, ensure_ascii=False, indent=2)
+        installed.append(pack_name)
+    return installed

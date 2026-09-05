@@ -352,6 +352,9 @@
                 <span class="card-title">Studio — editor visual de automações</span>
                 <p style="font-size: 13px; color: var(--ink-muted); margin-top: 4px;">Escolha um exemplo ou um fluxo seu para abrir no editor. Cada bloco chama uma atividade — nenhum id do SAP GUI aparece aqui.</p>
               </div>
+              <button class="btn btn-outline" style="padding: 8px 16px; font-size: 12.5px;" onclick="window.studioBridge.importFlow()">
+                <i class="ri-download-2-line"></i> Importar .mirflow.json
+              </button>
             </div>
             <div class="studio-gallery-grid" id="studio-gallery-grid">
               <div class="studio-source-empty">Carregando...</div>
@@ -377,6 +380,9 @@
                 </button>
                 <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.saveCurrentFlow()">
                   <i class="ri-save-3-line"></i> Salvar
+                </button>
+                <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" onclick="window.studioBridge.exportCurrentFlow()">
+                  <i class="ri-share-forward-2-line"></i> Exportar
                 </button>
                 <button class="btn btn-outline" style="padding: 7px 14px; font-size: 12.5px;" id="studio-publish-btn" onclick="window.studioBridge.publishCurrentFlow()">
                   <i class="ri-rocket-2-line"></i> Publicar

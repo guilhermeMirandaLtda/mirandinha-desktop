@@ -99,8 +99,9 @@ window.studioBridge = {
 
     Promise.all([
       window.pywebview.api.studio_list_samples(),
-      window.pywebview.api.studio_list_flows()
-    ]).then(([samplesRes, flowsRes]) => {
+      window.pywebview.api.studio_list_flows(),
+      window.pywebview.api.studio_list_team_library(),
+    ]).then(([samplesRes, flowsRes, teamRes]) => {
       let html = '';
 
       if (samplesRes.success && samplesRes.data.length > 0) {
@@ -124,13 +125,35 @@ window.studioBridge = {
         })).join('');
       }
 
-      container.innerHTML = html || '<div class="studio-source-empty">Nenhum exemplo ou fluxo disponível ainda.</div>';
+      html += `<div class="studio-gallery-section-title">Biblioteca da equipe
+        <a href="javascript:void(0)" onclick="window.studioBridge.configureTeamLibrary(event)"
+           style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:10px;color:var(--brand-primary);cursor:pointer;">
+          configurar pasta
+        </a>
+      </div>`;
+      if (teamRes.success && teamRes.data.length > 0) {
+        html += teamRes.data.map(f => this.galleryCard({
+          kind: 'team', ref: f.file_path, name: f.name,
+          meta: f.transacao || 'Studio',
+          desc: f.summary.elimina_ou_exclui
+            ? '⚠ elimina ou exclui dados no SAP'
+            : (f.summary.grava ? 'Grava no SAP' : 'Só leitura'),
+          chipClass: f.summary.elimina_ou_exclui ? 'danger' : 'info', chipLabel: 'equipe',
+        })).join('');
+      } else {
+        html += '<div class="studio-source-empty">Nenhuma pasta configurada ainda, ou nenhum .mirflow.json nela.</div>';
+      }
+
+      container.innerHTML = html;
     });
   },
 
   galleryCard: function(opts) {
+    const clickAction = opts.kind === 'team'
+      ? `window.studioBridge.importFromTeamLibrary('${studioEscapeHtml(opts.ref)}')`
+      : `window.studioBridge.openFromGallery('${opts.kind}', '${studioEscapeHtml(opts.ref)}')`;
     return `
-      <div class="studio-gallery-card" onclick="window.studioBridge.openFromGallery('${opts.kind}', '${studioEscapeHtml(opts.ref)}')">
+      <div class="studio-gallery-card" onclick="${clickAction}">
         <div class="studio-gallery-card-head">
           <span class="studio-chip ${opts.chipClass}">${studioEscapeHtml(opts.chipLabel)}</span>
           <span class="mono" style="font-size:10.5px;color:var(--ink-muted);">${studioEscapeHtml(opts.meta)}</span>
@@ -139,6 +162,29 @@ window.studioBridge = {
         <div class="studio-gallery-card-desc">${studioEscapeHtml(opts.desc)}</div>
       </div>
     `;
+  },
+
+  configureTeamLibrary: function(evt) {
+    if (evt) evt.stopPropagation();
+    window.pywebview.api.studio_select_team_library_folder().then(res => {
+      if (!res.success) {
+        window.appBridge.appendLog('ERROR', `Falha ao selecionar a pasta: ${res.error.message}`);
+        return;
+      }
+      if (!res.data) return; // cancelou o diálogo
+      window.appBridge.appendLog('SUCCESS', `Pasta da biblioteca da equipe configurada: ${res.data}`);
+      this.renderGallery();
+    });
+  },
+
+  importFromTeamLibrary: function(filePath) {
+    window.pywebview.api.studio_inspect_mirflow(filePath).then(res => {
+      if (!res.success) {
+        window.appBridge.appendLog('ERROR', `Falha ao ler o arquivo: ${res.error.message}`);
+        return;
+      }
+      this._confirmImport(filePath, res.data);
+    });
   },
 
   openFromGallery: function(kind, ref) {
@@ -470,6 +516,114 @@ window.studioBridge = {
   clearConsole: function() {
     const box = document.getElementById('studio-console-output');
     if (box) box.innerHTML = '';
+  },
+
+  // ---- compartilhar (Etapa 6) ----
+
+  exportCurrentFlow: function() {
+    if (!this.currentGraph) { this._noFlowWarning(); return; }
+    window.pywebview.api.studio_export_flow(this.currentGraph).then(res => {
+      if (!res.success) {
+        window.appBridge.appendLog('ERROR', `Falha ao exportar: ${res.error.message}`);
+        return;
+      }
+      if (res.data.cancelled) return; // usuário fechou o diálogo de salvar
+
+      const packs = res.data.packs_incluidos || [];
+      const packsMsg = packs.length ? `Packs incluídos: ${packs.join(', ')}.` : 'Nenhum pack de tela referenciado.';
+      window.appBridge.appendLog('SUCCESS', `Fluxo exportado para: ${res.data.file_path}. ${packsMsg}`);
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'success', title: 'Fluxo exportado',
+          html: `Salvo em:<br><code style="font-size:11px;">${studioEscapeHtml(res.data.file_path)}</code><br><br>${studioEscapeHtml(packsMsg)}`,
+          confirmButtonColor: '#7A70BA',
+        });
+      }
+    });
+  },
+
+  importFlow: function() {
+    window.pywebview.api.studio_select_import_file().then(selRes => {
+      if (!selRes.success || !selRes.data) return; // cancelou o diálogo
+      const filePath = selRes.data;
+
+      window.pywebview.api.studio_inspect_mirflow(filePath).then(res => {
+        if (!res.success) {
+          window.appBridge.appendLog('ERROR', `Falha ao ler o arquivo: ${res.error.message}`);
+          if (typeof Swal !== 'undefined') Swal.fire('Não foi possível ler o arquivo', res.error.message || '', 'error');
+          return;
+        }
+        this._confirmImport(filePath, res.data);
+      });
+    });
+  },
+
+  _confirmImport: function(filePath, inspection) {
+    const s = inspection.summary;
+    const errors = (inspection.validation.issues || []).filter(i => i.severity === 'error');
+
+    const rows = [];
+    rows.push(`<div><b>Transações:</b> ${s.transacoes.length ? studioEscapeHtml(s.transacoes.join(', ')) : '—'}</div>`);
+    rows.push(`<div><b>Grava no SAP:</b> ${s.grava ? '<span style="color:#B67A1E;">sim</span>' : 'não'}</div>`);
+    rows.push(`<div><b>Elimina / exclui:</b> ${s.elimina_ou_exclui ? '<span style="color:#C6164F;font-weight:600;">sim — confira com atenção</span>' : 'não'}</div>`);
+    if (s.insumos && s.insumos.length) {
+      s.insumos.forEach(i => rows.push(`<div><b>Planilha exigida:</b> colunas ${studioEscapeHtml((i.colunas || []).join(', '))}</div>`));
+    }
+    if (inspection.packs_faltando_localmente && inspection.packs_faltando_localmente.length) {
+      rows.push(`<div><b>Packs a instalar:</b> ${studioEscapeHtml(inspection.packs_faltando_localmente.join(', '))}</div>`);
+    }
+    if (s.needs_review_node_ids && s.needs_review_node_ids.length) {
+      rows.push(`<div style="color:#B67A1E;"><b>${s.needs_review_node_ids.length} bloco(s)</b> pendente(s) de revisão.</div>`);
+    }
+    if (errors.length) {
+      rows.push(`<div style="color:#C6164F;"><b>${errors.length} problema(s) de validação</b> — o fluxo chega como rascunho mesmo assim, mas não poderá ser publicado até corrigir.</div>`);
+    }
+    if (inspection.flow_id_ja_existe) {
+      rows.push(`<div style="color:#B67A1E;"><b>Atenção:</b> já existe um fluxo salvo com este id — importar substitui o rascunho local (a versão anterior fica no histórico) e derruba a publicação, se estava publicado.</div>`);
+    }
+
+    const html = `
+      <div style="text-align:left;font-size:13px;line-height:1.7;">
+        <div style="margin-bottom:8px;"><b>${studioEscapeHtml(inspection.graph.name || inspection.graph.flow_id)}</b></div>
+        ${rows.join('')}
+        <div style="margin-top:10px;color:#8E8D9A;font-size:11.5px;">O fluxo importado chega sempre como rascunho — nunca publicado automaticamente.</div>
+      </div>
+    `;
+
+    if (typeof Swal === 'undefined') {
+      // Sem SweetAlert2 disponível: importa direto, sem a confirmação visual.
+      this._doImport(filePath);
+      return;
+    }
+
+    Swal.fire({
+      title: 'Importar este fluxo?',
+      html: html,
+      icon: s.elimina_ou_exclui ? 'warning' : 'info',
+      showCancelButton: true,
+      confirmButtonText: 'Importar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#7A70BA',
+    }).then(result => {
+      if (result.isConfirmed) this._doImport(filePath);
+    });
+  },
+
+  _doImport: function(filePath) {
+    window.pywebview.api.studio_import_mirflow(filePath).then(res => {
+      if (!res.success) {
+        window.appBridge.appendLog('ERROR', `Falha ao importar: ${res.error.message}`);
+        if (typeof Swal !== 'undefined') Swal.fire('Não foi possível importar', res.error.message || '', 'error');
+        return;
+      }
+      const installed = res.data.packs_instalados || [];
+      const installedMsg = installed.length ? ` Packs instalados: ${installed.join(', ')}.` : '';
+      window.appBridge.appendLog('SUCCESS', `Fluxo importado como rascunho: ${res.data.flow_id}.${installedMsg}`);
+      this.renderGallery();
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({ icon: 'success', title: 'Importado!', text: 'O fluxo já aparece em "Meus fluxos", como rascunho.', confirmButtonColor: '#7A70BA' });
+      }
+    });
   },
 
   // ---- trace ao vivo ----

@@ -8,6 +8,9 @@ env/
 # Banco de histórico local (gerado em runtime)
 mirandinha_history.db
 
+# Config local da Biblioteca da Equipe do Studio (caminho de rede é por máquina)
+core/studio/team_library.json
+
 # Build/dist do PyInstaller
 build/
 dist/

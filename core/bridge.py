@@ -441,4 +441,176 @@ class MirandinhaBridge:
         except Exception as e:
             return error_response("STUDIO_EXECUTION_ERROR", f"Erro durante a execução do fluxo: {str(e)}", traceback.format_exc())
 
+    # ================================================================
+    # Módulo Studio (Etapa 6) — compartilhar um fluxo como arquivo .mirflow.json
+    # ================================================================
+
+    def studio_export_flow(self, graph: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Gera o bundle auto-contido (grafo + packs referenciados) e deixa o usuário
+        escolher onde salvar. Auto-contido importa: quem recebe pode não ter o pack que
+        este grafo usa (ex.: MB22) — sem empacotar junto, o fluxo chega quebrado.
+        """
+        try:
+            if not self._window:
+                return error_response("WINDOW_NOT_READY", "Janela da aplicação não inicializada.")
+
+            from core.studio.screen_library import export_bundle
+            bundle = export_bundle(graph)
+
+            default_name = f"{graph.get('flow_id', 'fluxo')}.mirflow.json"
+            result = self._window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=default_name,
+                file_types=('Fluxo do Studio (*.mirflow.json)',)
+            )
+            if not result:
+                return success_response({"cancelled": True})
+            save_path = result if isinstance(result, str) else result[0]
+
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(bundle, f, ensure_ascii=False, indent=2)
+
+            return success_response({
+                "file_path": save_path,
+                "packs_incluidos": list(bundle["packs"].keys()),
+            })
+        except Exception as e:
+            return error_response("STUDIO_EXPORT_ERROR", "Falha ao exportar o fluxo.", str(e))
+
+    def studio_select_import_file(self) -> Dict[str, Any]:
+        """Abre o seletor de arquivo pedindo um .mirflow.json."""
+        try:
+            if not self._window:
+                return error_response("WINDOW_NOT_READY", "Janela da aplicação não inicializada.")
+            file_types = ('Fluxo do Studio (*.mirflow.json)', 'Todos os arquivos (*.*)')
+            result = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)
+            path = result[0] if (result and len(result) > 0) else None
+            return success_response(path)
+        except Exception as e:
+            return error_response("DIALOG_ERROR", "Falha ao abrir seletor de arquivos.", str(e))
+
+    def studio_inspect_mirflow(self, file_path: str) -> Dict[str, Any]:
+        """
+        Lê um .mirflow.json e devolve o resumo do que ele faz, sem tocar em disco nem no
+        banco — é o que alimenta a tela de confirmação antes do usuário decidir importar.
+        """
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                bundle = json.load(f)
+
+            if "graph" not in bundle:
+                return error_response("MIRFLOW_INVALID", "Arquivo não parece ser um .mirflow.json válido (falta 'graph').")
+
+            graph = bundle["graph"]
+            from core.studio.validator import validate_graph
+            from core.studio.summary import summarize_flow
+            from core.studio.screen_library import list_packs
+            from core.storage import get_studio_flow
+
+            validation = validate_graph(graph)
+            summary = summarize_flow(graph)
+
+            local_packs = {p["pack"] for p in list_packs()}
+            bundled_packs = set((bundle.get("packs") or {}).keys())
+
+            existing = get_studio_flow(graph.get("flow_id", ""))
+
+            return success_response({
+                "graph": graph,
+                "summary": summary,
+                "validation": validation,
+                "packs_no_bundle": sorted(bundled_packs),
+                "packs_faltando_localmente": sorted(bundled_packs - local_packs),
+                "flow_id_ja_existe": existing is not None,
+            })
+        except FileNotFoundError:
+            return error_response("FILE_NOT_FOUND", f"Arquivo não encontrado: '{file_path}'.")
+        except json.JSONDecodeError as e:
+            return error_response("MIRFLOW_INVALID", "Arquivo não é um JSON válido.", str(e))
+        except Exception as e:
+            return error_response("STUDIO_INSPECT_ERROR", "Falha ao inspecionar o arquivo.", str(e))
+
+    def studio_import_mirflow(self, file_path: str) -> Dict[str, Any]:
+        """
+        Importa de fato: instala os packs que faltam localmente e salva o fluxo como
+        RASCUNHO — o portão. Nunca chega publicado, mesmo que quem exportou tivesse
+        publicado o original; publicar de novo é decisão de quem importa, não de quem
+        compartilhou.
+        """
+        try:
+            if getattr(self.rpa_runner, "_is_running", False):
+                return error_response("RPA_BUSY", "Não é possível importar um fluxo enquanto uma automação está em execução.")
+
+            with open(file_path, "r", encoding="utf-8") as f:
+                bundle = json.load(f)
+
+            if "graph" not in bundle:
+                return error_response("MIRFLOW_INVALID", "Arquivo não parece ser um .mirflow.json válido (falta 'graph').")
+
+            graph = bundle["graph"]
+            flow_id = graph.get("flow_id")
+            if not flow_id:
+                return error_response("FLOW_INVALID", "O grafo importado precisa de um 'flow_id'.")
+
+            from core.studio.screen_library import import_bundle_packs
+            installed = import_bundle_packs(bundle)
+
+            from core.storage import save_studio_flow, set_studio_flow_published
+            save_result = save_studio_flow(
+                flow_id=flow_id,
+                name=graph.get("name", flow_id),
+                graph=graph,
+                group_name=graph.get("group"),
+                transacao=graph.get("transacao"),
+                schema_version=graph.get("schema_version", 1),
+                origem="importado",
+                note="Importado de .mirflow.json",
+            )
+            # Força despublicado independente do que o save fez — nunca confiar no
+            # is_published de um arquivo que veio de fora.
+            set_studio_flow_published(flow_id, False)
+
+            return success_response({
+                "flow_id": flow_id,
+                "packs_instalados": installed,
+                "updated_at": save_result["updated_at"],
+            })
+        except FileNotFoundError:
+            return error_response("FILE_NOT_FOUND", f"Arquivo não encontrado: '{file_path}'.")
+        except json.JSONDecodeError as e:
+            return error_response("MIRFLOW_INVALID", "Arquivo não é um JSON válido.", str(e))
+        except Exception as e:
+            return error_response("STUDIO_IMPORT_ERROR", "Falha ao importar o fluxo.", str(e))
+
+    # ---- Biblioteca da equipe: pasta de rede com .mirflow.json, sem servidor ----
+
+    def studio_get_team_library_path(self) -> Dict[str, Any]:
+        try:
+            from core.studio.team_library import get_team_library_path
+            return success_response(get_team_library_path())
+        except Exception as e:
+            return error_response("TEAM_LIBRARY_ERROR", "Falha ao ler a configuração da biblioteca da equipe.", str(e))
+
+    def studio_select_team_library_folder(self) -> Dict[str, Any]:
+        """Abre o seletor de pasta e já grava a escolha como a pasta da equipe."""
+        try:
+            if not self._window:
+                return error_response("WINDOW_NOT_READY", "Janela da aplicação não inicializada.")
+            result = self._window.create_file_dialog(webview.FOLDER_DIALOG)
+            path = result[0] if (result and len(result) > 0) else None
+            if path:
+                from core.studio.team_library import set_team_library_path
+                set_team_library_path(path)
+            return success_response(path)
+        except Exception as e:
+            return error_response("DIALOG_ERROR", "Falha ao selecionar a pasta.", str(e))
+
+    def studio_list_team_library(self) -> Dict[str, Any]:
+        try:
+            from core.studio.team_library import list_team_library_files
+            return success_response(list_team_library_files())
+        except Exception as e:
+            return error_response("TEAM_LIBRARY_ERROR", "Falha ao listar a biblioteca da equipe.", str(e))
+
 
