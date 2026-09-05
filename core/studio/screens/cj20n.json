@@ -1,0 +1,113 @@
+{
+  "pack": "cj20n",
+  "transacao": "CJ20N",
+  "nome": "Project Builder (CJ20N)",
+  "origem": "promovido de core/rpa/selectors/cj20n.json",
+  "elementos": {
+    "btn_open": {
+      "rotulo": "Abrir projeto/diagrama",
+      "tela": "Tela inicial",
+      "tipo": "botao",
+      "id": "wnd[0]/shellcont/shellcont/shell/shellcont[0]/shell/shellcont[0]/shell",
+      "fallbacks": []
+    },
+    "filter_proj_ext": {
+      "rotulo": "Filtro: Projeto",
+      "tela": "Modal de busca",
+      "tipo": "campo_texto",
+      "id": "wnd[1]/usr/ctxtCNPB_W_ADD_OBJ_DYN-PROJ_EXT",
+      "fallbacks": []
+    },
+    "filter_prps_ext": {
+      "rotulo": "Filtro: Elemento PEP",
+      "tela": "Modal de busca",
+      "tipo": "campo_texto",
+      "id": "wnd[1]/usr/ctxtCNPB_W_ADD_OBJ_DYN-PRPS_EXT",
+      "fallbacks": []
+    },
+    "input_aufnr": {
+      "rotulo": "Diagrama",
+      "tela": "Modal de busca",
+      "tipo": "campo_texto",
+      "id": "wnd[1]/usr/ctxtCNPB_W_ADD_OBJ_DYN-AUFNR",
+      "fallbacks": []
+    },
+    "btn_search_confirm": {
+      "rotulo": "Confirmar busca",
+      "tela": "Modal de busca",
+      "tipo": "botao",
+      "id": "wnd[1]/tbar[0]/btn[0]",
+      "fallbacks": []
+    },
+    "tree_project": {
+      "rotulo": "Árvore do projeto",
+      "tela": "Árvore do projeto",
+      "tipo": "arvore",
+      "id": "wnd[0]/shellcont/shellcont/shell/shellcont[0]/shell/shellcont[1]/shell",
+      "fallbacks": []
+    },
+    "toolbar_overview": {
+      "rotulo": "Barra da visão geral de componentes",
+      "tela": "Detalhe do diagrama",
+      "tipo": "janela_container",
+      "id": "wnd[0]/usr/subDETAIL_AREA:SAPLCNPB_M:1010/cntlTOOLBAR_CONTAINER_OVERVIEW/shellcont/shell",
+      "fallbacks": []
+    },
+    "btn_mass_copy": {
+      "rotulo": "Alteração em massa (copiar dados)",
+      "tela": "Visão geral de componentes",
+      "tipo": "botao",
+      "id": "wnd[0]/usr/subDETAIL_AREA:SAPLCNPB_M:1010/subVIEW_AREA:SAPLCOMK:2799/tabsTABSTRIP_2700/tabpALLE/ssubSUBSCR_2000:SAPLCOMK:2701/btnICON_SYSTEM_COPY",
+      "fallbacks": []
+    },
+    "btn_deselect_all": {
+      "rotulo": "Desmarcar todos os campos",
+      "tela": "Alteração em massa",
+      "tipo": "botao",
+      "id": "wnd[1]/usr/btnMALO_F",
+      "fallbacks": []
+    },
+    "chk_mark_bdter": {
+      "rotulo": "Marcar campo: Data de necessidade",
+      "tela": "Alteração em massa",
+      "tipo": "checkbox",
+      "id": "wnd[1]/usr/chkFLG_MARK_RESBD-MARK_BDTER",
+      "fallbacks": []
+    },
+    "input_bdter": {
+      "rotulo": "Data de necessidade",
+      "tela": "Alteração em massa",
+      "tipo": "campo_data",
+      "id": "wnd[1]/usr/ctxtRESBD-BDTER",
+      "fallbacks": []
+    },
+    "btn_mark_all_lines": {
+      "rotulo": "Marcar todas as posições",
+      "tela": "Alteração em massa",
+      "tipo": "botao",
+      "id": "wnd[1]/usr/btnMAAL",
+      "fallbacks": []
+    },
+    "btn_modal_confirm": {
+      "rotulo": "Confirmar alteração em massa",
+      "tela": "Alteração em massa",
+      "tipo": "botao",
+      "id": "wnd[1]/tbar[0]/btn[13]",
+      "fallbacks": []
+    },
+    "btn_modal_enter": {
+      "rotulo": "Confirmar (Enter)",
+      "tela": "Alteração em massa",
+      "tipo": "botao",
+      "id": "wnd[1]/tbar[0]/btn[0]",
+      "fallbacks": []
+    },
+    "btn_popup_save_confirm": {
+      "rotulo": "Confirmar gravação",
+      "tela": "Popup de confirmação",
+      "tipo": "botao",
+      "id": "wnd[1]/usr/btnSPOP-OPTION1",
+      "fallbacks": []
+    }
+  }
+}

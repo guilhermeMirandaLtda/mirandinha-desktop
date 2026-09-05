@@ -8,12 +8,23 @@ Etapa 1: só executa grafos LINEARES (flow.start -> ... -> flow.end, sem ramific
 clara — chegam na Etapa 4, quando o corpo do laço passa a mapear sobre get_work_items()/
 process_item() como descrito no plano técnico.
 """
+import time
 from typing import Callable, Dict, Any, List, Optional
 
 from core.rpa.base import RPAJobBase
 from core.studio.execution_context import ExecutionContext
 from core.studio.node_catalog import is_implemented
 from core.studio.validator import validate_graph
+from core.studio.screen_library import resolve_candidates
+
+# Ids universais de popup — os mesmos em qualquer transação SAP, por isso não vêm de
+# nenhum pack da Biblioteca de Telas. 'window' (ex.: "wnd[1]") é prefixado na frente.
+_POPUP_ACTION_SUFFIX = {
+    "ok": "tbar[0]/btn[0]",
+    "yes": "usr/btnSPOP-OPTION1",
+    "no": "usr/btnSPOP-OPTION2",
+    "cancel": "tbar[0]/btn[12]",
+}
 
 
 class GraphTask(RPAJobBase):
@@ -55,6 +66,18 @@ class GraphTask(RPAJobBase):
             "sap.connect": self._h_sap_connect,
             "sap.transaction": self._h_sap_transaction,
             "sap.grid_read": self._h_sap_grid_read,
+            "sap.grid_double_click": self._h_sap_grid_double_click,
+            "sap.set_text": self._h_sap_set_text,
+            "sap.press": self._h_sap_press,
+            "sap.select": self._h_sap_select,
+            "sap.set_checkbox": self._h_sap_set_checkbox,
+            "sap.toolbar_press": self._h_sap_toolbar_press,
+            "sap.save": self._h_sap_save,
+            "sap.back": self._h_sap_back,
+            "sap.wait_for": self._h_sap_wait_for,
+            "sap.handle_popup": self._h_sap_handle_popup,
+            "flow.assert_absent": self._h_flow_assert_absent,
+            "flow.escape": self._h_flow_escape,
             "data.log": self._h_data_log,
         }
 
@@ -161,14 +184,16 @@ class GraphTask(RPAJobBase):
 
     # ---- resolução de alvo de tela ----
 
-    def _resolve_target(self, target: Any) -> str:
+    def _resolve_target(self, target: Any) -> List[str]:
+        """
+        Retorna a lista de ids candidatos a tentar, em ordem, para SapSession.find_element_any().
+        target pode ser um id literal do SAP GUI (string — modo avançado / migração) ou uma
+        referência da Biblioteca de Telas {"pack": ..., "ref": ...} (o caso comum, no-code).
+        """
         if isinstance(target, str):
-            return target
+            return [target]
         if isinstance(target, dict) and "pack" in target and "ref" in target:
-            raise RuntimeError(
-                f"Referência de tela '{target['pack']}.{target['ref']}' requer a Biblioteca de "
-                f"Telas, que chega na Etapa 2. Use um id literal do SAP GUI por enquanto."
-            )
+            return resolve_candidates(target["pack"], target["ref"])
         raise ValueError(f"Formato de 'target' inválido: {target!r}")
 
     # ---- handlers de nó ----
@@ -184,20 +209,20 @@ class GraphTask(RPAJobBase):
 
     def _h_sap_grid_read(self, node: Dict[str, Any]):
         params = node.get("params", {})
-        target = self._resolve_target(params["target"])
+        candidates = self._resolve_target(params["target"])
         columns = params["columns"]
         output_var = params.get("output_var", "linhas")
 
-        grid = self.sap.find_element(target)
+        grid = self.sap.find_element_any(candidates)
         row_count = grid.rowCount
 
         resolved_cols: Dict[str, str] = {}
         for col in columns:
             col_name = col["name"]
-            candidates = [col_name] + list(col.get("fallbacks", []))
+            col_candidates = [col_name] + list(col.get("fallbacks", []))
             resolved = col_name
             if row_count > 0:
-                for cand in candidates:
+                for cand in col_candidates:
                     try:
                         grid.GetCellValue(0, cand)
                         resolved = cand
@@ -208,7 +233,7 @@ class GraphTask(RPAJobBase):
 
         rows: List[Dict[str, Any]] = []
         for i in range(row_count):
-            row = {}
+            row: Dict[str, Any] = {"_row": i}
             for col in columns:
                 col_name = col["name"]
                 try:
@@ -219,6 +244,126 @@ class GraphTask(RPAJobBase):
 
         self.ctx.set_var(output_var, rows)
         self.log("INFO", f"Grade lida: {row_count} linha(s) publicada(s) em '{output_var}'.")
+
+    def _h_sap_grid_double_click(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        candidates = self._resolve_target(params["target"])
+        row = self.ctx.resolve_value(params["row"])
+        column = self.ctx.resolve_value(params["column"])
+
+        grid = self.sap.find_element_any(candidates)
+        grid.currentCellRow = int(row)
+        grid.currentCellColumn = column
+        grid.doubleClickCurrentCell()
+
+    def _h_sap_set_text(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        candidates = self._resolve_target(params["target"])
+        value = self.ctx.resolve_value(params["value"])
+        el = self.sap.find_element_any(candidates)
+        el.text = "" if value is None else str(value)
+
+    def _h_sap_press(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        candidates = self._resolve_target(params["target"])
+        self.sap.find_element_any(candidates).press()
+
+    def _h_sap_select(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        candidates = self._resolve_target(params["target"])
+        el = self.sap.find_element_any(candidates)
+        node_ref = params.get("node")
+        if node_ref is not None:
+            el.selectedNode = self.ctx.resolve_value(node_ref)
+        else:
+            el.select()
+
+    def _h_sap_set_checkbox(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        candidates = self._resolve_target(params["target"])
+        el = self.sap.find_element_any(candidates)
+        el.selected = bool(self.ctx.resolve_value(params["checked"]))
+
+    def _h_sap_toolbar_press(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        candidates = self._resolve_target(params["target"])
+        button = self.ctx.resolve_value(params["button"])
+        self.sap.find_element_any(candidates).pressButton(button)
+
+    def _h_sap_save(self, node: Dict[str, Any]):
+        # Universal — btn[11] (Gravar) é o mesmo id em qualquer transação do SAP GUI.
+        self.sap.find_element("wnd[0]/tbar[0]/btn[11]").press()
+
+    def _h_sap_back(self, node: Dict[str, Any]):
+        # Universal — F3 (vkey 3) é o mesmo em qualquer transação.
+        self.sap.session.findById("wnd[0]").sendVKey(3)
+
+    def _h_sap_wait_for(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        candidates = self._resolve_target(params["target"])
+        timeout_ms = int(params.get("timeout_ms", 5000))
+        poll_s = 0.08
+        waited = 0.0
+
+        while True:
+            for cand in candidates:
+                try:
+                    self.sap.session.findById(cand)
+                    return
+                except Exception:
+                    continue
+            if waited >= timeout_ms / 1000.0:
+                raise RuntimeError(f"Elemento não apareceu em {timeout_ms}ms: {candidates}")
+            time.sleep(poll_s)
+            waited += poll_s
+
+    def _h_sap_handle_popup(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        window = params.get("window", "wnd[1]")
+        action = params.get("action")
+        optional = params.get("optional", True)
+
+        if action not in _POPUP_ACTION_SUFFIX:
+            raise ValueError(f"'action' inválida em sap.handle_popup: '{action}'. Use ok|yes|no|cancel.")
+
+        try:
+            popup = self.sap.session.findById(window)
+        except Exception:
+            if optional:
+                self.log("DEBUG", f"Popup '{window}' não apareceu (opcional) — seguindo.")
+                return
+            raise RuntimeError(f"Popup esperado '{window}' não apareceu.")
+
+        popup_text = ""
+        try:
+            popup_text = str(popup.text).strip()
+        except Exception:
+            pass
+        if popup_text:
+            self.log("WARNING", f"Popup do SAP: {popup_text}")
+
+        action_id = f"{window}/{_POPUP_ACTION_SUFFIX[action]}"
+        self.sap.session.findById(action_id).press()
+
+    def _h_flow_assert_absent(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        candidates = self._resolve_target(params["target"])
+        message = self.ctx.resolve_value(params["message"])
+
+        for cand in candidates:
+            try:
+                self.sap.session.findById(cand)
+            except Exception:
+                continue
+            raise RuntimeError(message)
+        # Nenhum candidato encontrado — o elemento realmente sumiu, a asserção passa.
+
+    def _h_flow_escape(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        attempts = max(1, int(params.get("attempts", 3)))
+        for _ in range(attempts):
+            self.sap.safe_recover_state()
+        self.log("DEBUG", f"Rotina de escape executada ({attempts} tentativa(s)).")
 
     def _h_data_log(self, node: Dict[str, Any]):
         params = node.get("params", {})

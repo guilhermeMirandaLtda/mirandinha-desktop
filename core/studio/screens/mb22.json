@@ -1,0 +1,36 @@
+{
+  "pack": "mb22",
+  "transacao": "MB22",
+  "nome": "Modificar Reserva (MB22)",
+  "origem": "promovido de core/rpa/selectors/mb22.json",
+  "elementos": {
+    "input_reserva": {
+      "rotulo": "Número da reserva",
+      "tela": "Tela inicial",
+      "tipo": "campo_texto",
+      "id": "wnd[0]/usr/ctxtRM07M-RSNUM",
+      "fallbacks": []
+    },
+    "btn_select_item": {
+      "rotulo": "Selecionar item",
+      "tela": "Tela inicial",
+      "tipo": "botao",
+      "id": "wnd[0]/tbar[1]/btn[20]",
+      "fallbacks": []
+    },
+    "input_item_popup": {
+      "rotulo": "Número do item",
+      "tela": "Modal de seleção de item",
+      "tipo": "campo_texto",
+      "id": "wnd[1]/usr/txtRM07M-RSPOS",
+      "fallbacks": []
+    },
+    "chk_eliminar": {
+      "rotulo": "Marcar eliminação (XLOEK)",
+      "tela": "Detalhe da reserva",
+      "tipo": "checkbox",
+      "id": "wnd[0]/usr/chkRESB-XLOEK",
+      "fallbacks": []
+    }
+  }
+}

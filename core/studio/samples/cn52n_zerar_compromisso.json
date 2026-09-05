@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "flow_id": "flow_cn52n_zerar_compromisso",
+  "name": "Zerar Compromisso (CN52N)",
+  "group": "Materiais",
+  "transacao": "CN52N",
+  "description": "Recriação como grafo da automação nativa SAPZerarCompromissoTask — todo alvo de tela vem do pack 'cn52n' da Biblioteca de Telas, nenhum id cru do SAP GUI aparece neste arquivo. Requer suporte a flow.foreach, que chega na Etapa 4: GraphTask.validate_input() recusa este grafo até lá, de propósito. O roteamento pela porta 'error' para uma rotina de escape também é trabalho da Etapa 4 — aqui os nós do corpo do laço só declaram a intenção via on_error.",
+  "variables": {
+    "local_descarga": "."
+  },
+  "groups": [
+    { "id": "g_abrir_item", "label": "Abrir o detalhe do item", "collapsed": false },
+    { "id": "g_preencher", "label": "Zerar quantidade e local", "collapsed": false },
+    { "id": "g_gravar", "label": "Gravar e conferir", "collapsed": false }
+  ],
+  "nodes": [
+    { "id": "n_start", "type": "flow.start", "label": "Início", "position": {"x": 0, "y": 0}, "params": {} },
+    {
+      "id": "n_connect", "type": "sap.connect", "label": "Conectar ao SAP",
+      "position": {"x": 0, "y": 80}, "params": {}, "on_error": "abort"
+    },
+    {
+      "id": "n_grid", "type": "sap.grid_read", "label": "Ler a grade da CN52N",
+      "position": {"x": 0, "y": 160},
+      "params": {
+        "target": { "pack": "cn52n", "ref": "grid_alv" },
+        "columns": [
+          { "name": "POSID", "fallbacks": ["POSID_EDIT"] },
+          { "name": "MAKTX", "fallbacks": ["MATXT"] }
+        ],
+        "output_var": "linhas"
+      },
+      "on_error": "abort"
+    },
+    {
+      "id": "n_foreach", "type": "flow.foreach", "label": "Para cada linha",
+      "position": {"x": 0, "y": 240},
+      "params": { "source": "{{linhas}}", "item_var": "item" }
+    },
+
+    {
+      "id": "n_open", "type": "sap.grid_double_click", "label": "Abrir o detalhe do item",
+      "group_id": "g_abrir_item", "position": {"x": 340, "y": 240},
+      "params": {
+        "target": { "pack": "cn52n", "ref": "grid_alv" },
+        "row": "{{item._row}}",
+        "column": "FLMNG"
+      },
+      "on_error": "skip_item",
+      "error_label": "Não foi possível abrir o detalhe do item na grade."
+    },
+    {
+      "id": "n_wait", "type": "sap.wait_for", "label": "Esperar a área de detalhe abrir",
+      "group_id": "g_abrir_item", "position": {"x": 340, "y": 284},
+      "params": { "target": { "pack": "cn52n", "ref": "painel_detalhe" }, "timeout_ms": 1500 },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_aba", "type": "sap.press", "label": "Abrir a aba de detalhes",
+      "group_id": "g_abrir_item", "position": {"x": 340, "y": 328},
+      "params": { "target": { "pack": "cn52n", "ref": "aba_detalhes" } },
+      "on_error": "skip_item",
+      "error_label": "Erro ao abrir aba de detalhes."
+    },
+
+    {
+      "id": "n_qtd", "type": "sap.set_text", "label": "Quantidade = 0",
+      "group_id": "g_preencher", "position": {"x": 340, "y": 372},
+      "params": { "target": { "pack": "cn52n", "ref": "campo_quantidade" }, "value": "0" },
+      "on_error": "skip_item",
+      "error_label": "Item bloqueado ou somente leitura."
+    },
+    {
+      "id": "n_local", "type": "sap.set_text", "label": "Local de descarga = {{local_descarga}}",
+      "group_id": "g_preencher", "position": {"x": 340, "y": 416},
+      "params": { "target": { "pack": "cn52n", "ref": "campo_local_descarga" }, "value": "{{local_descarga}}" },
+      "on_error": "skip_item",
+      "error_label": "Item bloqueado ou somente leitura."
+    },
+
+    {
+      "id": "n_save", "type": "sap.save", "label": "Gravar",
+      "group_id": "g_gravar", "position": {"x": 340, "y": 460},
+      "params": {}, "on_error": "skip_item",
+      "error_label": "Erro ao salvar."
+    },
+    {
+      "id": "n_popup", "type": "sap.handle_popup", "label": "Confirmar o aviso do SAP, se houver",
+      "group_id": "g_gravar", "position": {"x": 340, "y": 504},
+      "params": { "window": "wnd[1]", "action": "ok", "optional": true },
+      "on_error": "continue"
+    },
+    {
+      "id": "n_check", "type": "flow.assert_absent", "label": "Conferir que o detalhe fechou",
+      "group_id": "g_gravar", "position": {"x": 340, "y": 548},
+      "params": {
+        "target": { "pack": "cn52n", "ref": "painel_detalhe" },
+        "message": "A tela de detalhe continuou aberta — a gravação falhou."
+      },
+      "on_error": "skip_item"
+    },
+
+    { "id": "n_end", "type": "flow.end", "label": "Fim", "position": {"x": 0, "y": 620}, "params": {} }
+  ],
+  "edges": [
+    { "id": "e1", "from": "n_start", "to": "n_connect", "port": "out" },
+    { "id": "e2", "from": "n_connect", "to": "n_grid", "port": "out" },
+    { "id": "e3", "from": "n_grid", "to": "n_foreach", "port": "out" },
+
+    { "id": "e4", "from": "n_foreach", "to": "n_open", "port": "loop" },
+    { "id": "e5", "from": "n_open", "to": "n_wait", "port": "out" },
+    { "id": "e6", "from": "n_wait", "to": "n_aba", "port": "out" },
+    { "id": "e7", "from": "n_aba", "to": "n_qtd", "port": "out" },
+    { "id": "e8", "from": "n_qtd", "to": "n_local", "port": "out" },
+    { "id": "e9", "from": "n_local", "to": "n_save", "port": "out" },
+    { "id": "e10", "from": "n_save", "to": "n_popup", "port": "out" },
+    { "id": "e11", "from": "n_popup", "to": "n_check", "port": "out" },
+
+    { "id": "e12", "from": "n_foreach", "to": "n_end", "port": "done" }
+  ]
+}

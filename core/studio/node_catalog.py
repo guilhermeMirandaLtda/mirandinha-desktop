@@ -68,7 +68,7 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "ports": ["out"],
         "needs_on_error": True,
-        "implemented": False,
+        "implemented": True,
         "description": "value aceita literal ou {{variavel}}.",
     },
     "sap.press": {
@@ -77,7 +77,7 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         "params": [{"name": "target", "kind": "target", "required": True}],
         "ports": ["out"],
         "needs_on_error": True,
-        "implemented": False,
+        "implemented": True,
         "description": "Botão de tela ou de barra.",
     },
     "sap.select": {
@@ -89,8 +89,8 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "ports": ["out"],
         "needs_on_error": True,
-        "implemented": False,
-        "description": "Abas, radio buttons, nós de árvore.",
+        "implemented": True,
+        "description": "Abas, radio buttons, nós de árvore. Sem 'node', chama .select(); com 'node', define .selectedNode.",
     },
     "sap.set_checkbox": {
         "label": "Marcar caixa",
@@ -101,7 +101,7 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "ports": ["out"],
         "needs_on_error": True,
-        "implemented": False,
+        "implemented": True,
         "description": "",
     },
     "sap.toolbar_press": {
@@ -113,7 +113,7 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "ports": ["out"],
         "needs_on_error": True,
-        "implemented": False,
+        "implemented": True,
         "description": "O pressButton(\"COMP_OVW\") da CJ20N.",
     },
     "sap.save": {
@@ -122,8 +122,8 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         "params": [],
         "ports": ["out"],
         "needs_on_error": True,
-        "implemented": False,
-        "description": "Atividade, não btn[11].",
+        "implemented": True,
+        "description": "Atividade, não btn[11] — o id é universal (tbar[0]/btn[11]) e não vem de nenhum pack.",
     },
     "sap.back": {
         "label": "Voltar",
@@ -131,8 +131,8 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         "params": [],
         "ports": ["out"],
         "needs_on_error": True,
-        "implemented": False,
-        "description": "Atividade, não sendVKey(3).",
+        "implemented": True,
+        "description": "Atividade, não sendVKey(3) — universal, igual sap.save.",
     },
 
     # ---- Grid / ALV ----
@@ -148,7 +148,7 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         "needs_on_error": True,
         "default_on_error": "abort",
         "implemented": True,
-        "description": "Publica `linhas` no contexto. Cada coluna aceita fallbacks.",
+        "description": "Publica `linhas` no contexto. Cada coluna aceita fallbacks. Cada linha ganha um campo interno '_row' com o índice, para sap.grid_double_click.",
     },
     "sap.grid_double_click": {
         "label": "Abrir detalhe (duplo clique)",
@@ -160,8 +160,8 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "ports": ["out"],
         "needs_on_error": True,
-        "implemented": False,
-        "description": "O drill-down da CN52N.",
+        "implemented": True,
+        "description": "O drill-down da CN52N. row costuma ser {{item._row}}.",
     },
 
     # ---- Robustez ----
@@ -174,7 +174,7 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "ports": ["out", "error"],
         "needs_on_error": True,
-        "implemented": False,
+        "implemented": True,
         "description": "Espera o elemento existir, não o relógio passar.",
     },
     "sap.handle_popup": {
@@ -182,13 +182,13 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         "category": "Robustez",
         "params": [
             {"name": "window", "kind": "text", "required": False, "default": "wnd[1]"},
-            {"name": "action", "kind": "text", "required": True},
+            {"name": "action", "kind": "popup_action", "required": True},
             {"name": "optional", "kind": "bool", "required": False, "default": True},
         ],
         "ports": ["out"],
         "needs_on_error": True,
-        "implemented": False,
-        "description": "Captura o texto do popup antes de confirmar — vai para o log e o relatório.",
+        "implemented": True,
+        "description": "Captura o texto do popup antes de confirmar — vai para o log. 'action' é ok|yes|no|cancel — ids universais, sem precisar de pack.",
     },
     "flow.assert_absent": {
         "label": "Conferir que fechou",
@@ -199,7 +199,7 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "ports": ["out", "error"],
         "needs_on_error": True,
-        "implemented": False,
+        "implemented": True,
         "description": "\"A tela de detalhe continuou aberta\" = a gravação falhou. Verificação positiva de sucesso.",
     },
     "flow.escape": {
@@ -211,8 +211,8 @@ NODE_CATALOG: Dict[str, Dict[str, Any]] = {
         ],
         "ports": ["out"],
         "needs_on_error": False,
-        "implemented": False,
-        "description": "Envolve SapSession.safe_recover_state(), com sequência editável.",
+        "implemented": True,
+        "description": "Chama SapSession.safe_recover_state() 'attempts' vezes. 'sequence' customizável fica pra Etapa 4.",
     },
 
     # ---- Lógica & dados ----

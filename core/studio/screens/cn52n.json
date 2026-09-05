@@ -1,0 +1,43 @@
+{
+  "pack": "cn52n",
+  "transacao": "CN52N",
+  "nome": "Compromisso de Materiais em Projetos (CN52N)",
+  "origem": "extraído de core/rpa/tasks/sap_zerar_compromisso.py",
+  "elementos": {
+    "grid_alv": {
+      "rotulo": "Grade de itens (ALV)",
+      "tela": "Lista principal",
+      "tipo": "grid",
+      "id": "wnd[0]/usr/cntlALVCONTAINER/shellcont/shell",
+      "fallbacks": []
+    },
+    "painel_detalhe": {
+      "rotulo": "Área de detalhe do item",
+      "tela": "Detalhe do item",
+      "tipo": "painel",
+      "id": "wnd[0]/usr/subDETAIL_AREA:SAPLCNPB_M:1010",
+      "fallbacks": []
+    },
+    "aba_detalhes": {
+      "rotulo": "Aba de detalhes",
+      "tela": "Detalhe do item",
+      "tipo": "botao",
+      "id": "wnd[0]/tbar[1]/btn[13]",
+      "fallbacks": []
+    },
+    "campo_quantidade": {
+      "rotulo": "Quantidade (MENGE)",
+      "tela": "Detalhe do item · aba Quantidades/Datas",
+      "tipo": "campo_texto",
+      "id": "wnd[0]/usr/subDETAIL_AREA:SAPLCNPB_M:1010/subVIEW_AREA:SAPLCOMD:2800/tabsTABSTRIP_2700/tabpMKAG/ssubSUBSCR_2700:SAPLCOMD:2701/txtRESBD-MENGE",
+      "fallbacks": []
+    },
+    "campo_local_descarga": {
+      "rotulo": "Local de descarga (ABLAD)",
+      "tela": "Detalhe do item · aba Quantidades/Datas",
+      "tipo": "campo_texto",
+      "id": "wnd[0]/usr/subDETAIL_AREA:SAPLCNPB_M:1010/subVIEW_AREA:SAPLCOMD:2800/tabsTABSTRIP_2700/tabpMKAG/ssubSUBSCR_2700:SAPLCOMD:2701/txtRESBD-ABLAD",
+      "fallbacks": []
+    }
+  }
+}

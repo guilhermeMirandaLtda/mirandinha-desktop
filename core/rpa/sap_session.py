@@ -84,6 +84,24 @@ class SapSession:
             raise RuntimeError("Sessão SAP não inicializada.")
         return self.session.findById(element_id)
 
+    def find_element_any(self, candidates: list) -> Any:
+        """
+        Tenta uma lista de ids em ordem — o id primário de um elemento da Biblioteca de
+        Telas seguido dos seus fallbacks. Usado pelo GraphTask do Studio para resolver
+        alvos sem que o grafo precise saber qual variante de tela está ativa.
+        """
+        if not self.session:
+            raise RuntimeError("Sessão SAP não inicializada.")
+        last_err = None
+        for cand in candidates:
+            try:
+                return self.session.findById(cand)
+            except Exception as e:
+                last_err = e
+        raise RuntimeError(
+            f"Nenhum dos elementos foi encontrado na tela: {candidates}. Último erro: {last_err}"
+        )
+
     def start_transaction(self, tcode: str):
         """Navega para uma transação do SAP de forma blindada contra erros de prefixo e telas presas."""
         if not self.session:

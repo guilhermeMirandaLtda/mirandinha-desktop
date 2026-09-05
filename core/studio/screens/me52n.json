@@ -1,0 +1,29 @@
+{
+  "pack": "me52n",
+  "transacao": "ME52N",
+  "nome": "Modificar Requisição de Compra (ME52N)",
+  "origem": "promovido de core/rpa/selectors/me52n.json",
+  "elementos": {
+    "btn_other_req": {
+      "rotulo": "Outra requisição",
+      "tela": "Tela inicial",
+      "tipo": "botao",
+      "id": "wnd[0]/tbar[1]/btn[17]",
+      "fallbacks": []
+    },
+    "input_banfn_popup": {
+      "rotulo": "Número da requisição",
+      "tela": "Modal de seleção de documento",
+      "tipo": "campo_texto",
+      "id": "wnd[1]/usr/subSUB0:SAPLMEGUI:0003/ctxtMEPO_SELECT_DOCUMENT-BANFN",
+      "fallbacks": []
+    },
+    "btn_confirm_popup": {
+      "rotulo": "Confirmar (Enter)",
+      "tela": "Modal de seleção de documento",
+      "tipo": "botao",
+      "id": "wnd[1]/tbar[0]/btn[0]",
+      "fallbacks": []
+    }
+  }
+}
