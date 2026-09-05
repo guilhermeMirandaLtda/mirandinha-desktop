@@ -12,6 +12,8 @@ mirandinha_history.db
 build/
 dist/
 
+.pytest_cache/
+
 .DS_Store
 Thumbs.db
 .idea/

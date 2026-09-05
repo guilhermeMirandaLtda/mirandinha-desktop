@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "flow_id": "flow_cn52n_grid_read_teste",
+  "name": "Teste Etapa 1 — Ler grade da CN52N",
+  "group": "Studio",
+  "transacao": "CN52N",
+  "description": "Grafo mínimo de aceite da Etapa 1: conecta, abre a CN52N e lê a grade ALV. Não escreve nada no SAP.",
+  "usage_steps": [
+    "Abra o SAP e navegue até a CN52N com um layout carregado.",
+    "Rode: python scripts/run_flow.py core/studio/samples/cn52n_grid_read.json"
+  ],
+  "variables": {},
+  "groups": [],
+  "nodes": [
+    { "id": "n_start", "type": "flow.start", "label": "Início", "position": {"x": 0, "y": 0}, "params": {} },
+    {
+      "id": "n_connect",
+      "type": "sap.connect",
+      "label": "Conectar ao SAP",
+      "position": {"x": 0, "y": 80},
+      "params": {},
+      "on_error": "abort"
+    },
+    {
+      "id": "n_tx",
+      "type": "sap.transaction",
+      "label": "Abrir CN52N",
+      "position": {"x": 0, "y": 160},
+      "params": { "tcode": "CN52N" },
+      "on_error": "abort"
+    },
+    {
+      "id": "n_grid",
+      "type": "sap.grid_read",
+      "label": "Ler a grade da CN52N",
+      "position": {"x": 0, "y": 240},
+      "params": {
+        "target": "wnd[0]/usr/cntlALVCONTAINER/shellcont/shell",
+        "columns": [
+          { "name": "POSID", "fallbacks": ["POSID_EDIT"] },
+          { "name": "MAKTX", "fallbacks": ["MATXT"] }
+        ],
+        "output_var": "linhas"
+      },
+      "on_error": "abort"
+    },
+    {
+      "id": "n_log",
+      "type": "data.log",
+      "label": "Registrar resultado",
+      "position": {"x": 0, "y": 320},
+      "params": { "level": "SUCCESS", "message": "Grafo de teste concluído — grade lida com sucesso." },
+      "on_error": "continue"
+    },
+    { "id": "n_end", "type": "flow.end", "label": "Fim", "position": {"x": 0, "y": 400}, "params": {} }
+  ],
+  "edges": [
+    { "id": "e1", "from": "n_start", "to": "n_connect", "port": "out" },
+    { "id": "e2", "from": "n_connect", "to": "n_tx", "port": "out" },
+    { "id": "e3", "from": "n_tx", "to": "n_grid", "port": "out" },
+    { "id": "e4", "from": "n_grid", "to": "n_log", "port": "out" },
+    { "id": "e5", "from": "n_log", "to": "n_end", "port": "out" }
+  ]
+}

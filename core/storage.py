@@ -46,6 +46,32 @@ def init_db():
             cursor.execute("ALTER TABLE job_history ADD COLUMN time_saved_hours REAL DEFAULT 0.0")
         if "metadata" not in columns:
             cursor.execute("ALTER TABLE job_history ADD COLUMN metadata TEXT")
+
+        # ---- Módulo Studio: fluxos montados no editor visual (Etapa 1) ----
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS studio_flows (
+                flow_id         TEXT PRIMARY KEY,
+                name            TEXT NOT NULL,
+                group_name      TEXT,
+                transacao       TEXT,
+                graph_json      TEXT NOT NULL,
+                schema_version  INTEGER NOT NULL DEFAULT 1,
+                is_published    INTEGER DEFAULT 0,
+                origem          TEXT DEFAULT 'proprio',
+                created_at      TEXT,
+                updated_at      TEXT
+            )
+        """)
+        # append-only: nunca sobrescreve, permite voltar a uma versão que funcionava
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS studio_flow_versions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                flow_id     TEXT NOT NULL,
+                graph_json  TEXT NOT NULL,
+                saved_at    TEXT NOT NULL,
+                note        TEXT
+            )
+        """)
         conn.commit()
 
 def record_job_execution(
@@ -283,4 +309,85 @@ def get_dashboard_chart_data(start_date: str = None, end_date: str = None) -> Di
             "data": dist_data
         }
     }
+
+# ============================================================
+# Módulo Studio — persistência de fluxos (Etapa 1)
+# ============================================================
+
+def save_studio_flow(
+    flow_id: str,
+    name: str,
+    graph: Dict[str, Any],
+    group_name: str = None,
+    transacao: str = None,
+    schema_version: int = 1,
+    origem: str = "proprio",
+    note: str = None
+) -> Dict[str, Any]:
+    """
+    Grava (insere ou atualiza) um fluxo e sempre acrescenta uma versão em
+    studio_flow_versions — o append-only é o que permite voltar a uma versão que funcionava.
+    """
+    init_db()
+    now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    graph_json = json.dumps(graph, ensure_ascii=False)
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT flow_id, created_at FROM studio_flows WHERE flow_id = ?", (flow_id,))
+        existing = cursor.fetchone()
+
+        if existing:
+            cursor.execute("""
+                UPDATE studio_flows
+                SET name = ?, group_name = ?, transacao = ?, graph_json = ?,
+                    schema_version = ?, updated_at = ?
+                WHERE flow_id = ?
+            """, (name, group_name, transacao, graph_json, schema_version, now, flow_id))
+        else:
+            cursor.execute("""
+                INSERT INTO studio_flows (
+                    flow_id, name, group_name, transacao, graph_json,
+                    schema_version, is_published, origem, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+            """, (flow_id, name, group_name, transacao, graph_json, schema_version, origem, now, now))
+
+        cursor.execute("""
+            INSERT INTO studio_flow_versions (flow_id, graph_json, saved_at, note)
+            VALUES (?, ?, ?, ?)
+        """, (flow_id, graph_json, now, note))
+
+        version_id = cursor.lastrowid
+        conn.commit()
+
+    return {"flow_id": flow_id, "updated_at": now, "version_id": version_id}
+
+
+def get_studio_flow(flow_id: str) -> Dict[str, Any]:
+    """Retorna o fluxo com o grafo já desserializado, ou None se não existir."""
+    init_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM studio_flows WHERE flow_id = ?", (flow_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["graph"] = json.loads(d.pop("graph_json"))
+        return d
+
+
+def list_studio_flows() -> List[Dict[str, Any]]:
+    """Lista os fluxos sem o payload completo do grafo — só o resumo para telas de listagem."""
+    init_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT flow_id, name, group_name, transacao, schema_version,
+                   is_published, origem, created_at, updated_at
+            FROM studio_flows ORDER BY updated_at DESC
+        """)
+        return [dict(r) for r in cursor.fetchall()]
 
