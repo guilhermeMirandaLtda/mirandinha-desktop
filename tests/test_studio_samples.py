@@ -73,13 +73,13 @@ class TestZerarCompromissoSample(unittest.TestCase):
             targets_checked += 1
         self.assertGreater(targets_checked, 0)
 
-    def test_runtime_linear_recusa_por_causa_do_foreach(self):
-        """Confirma que a Etapa 2 não tenta rodar o laço — a mensagem aponta pra Etapa 4."""
+    def test_runtime_reconhece_o_laco_desde_a_etapa_4(self):
+        """A Etapa 4 passou a suportar flow.foreach — o grafo valida e localiza o laço."""
         graph = _load_sample()
         task = GraphTask(graph=graph, cancel_check=lambda: False)
-        with self.assertRaises(ValueError) as ctx:
-            task.validate_input()
-        self.assertIn("Etapa 4", str(ctx.exception))
+        task.validate_input()  # não levanta mais
+        self.assertIsNotNone(task._foreach_node)
+        self.assertEqual(task._foreach_node["id"], "n_foreach")
 
 
 if __name__ == "__main__":

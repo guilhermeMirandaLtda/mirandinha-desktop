@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "flow_id": "flow_cj20n_data_necessidade",
+  "name": "Data Necessidade (CJ20N)",
+  "group": "Materiais",
+  "transacao": "CJ20N",
+  "description": "Recriação como grafo da automação nativa SAPDataNecessidadeTask — todo alvo de tela vem do pack 'cj20n', zero ids crus. Requer a planilha em 'variables.spreadsheet_path' (ou params={'spreadsheet_path': ...} na hora de instanciar o GraphTask). Simplificações conscientes em relação ao Python original: os fallbacks de menu/atalho para abrir o diagrama e o fallback de nó '000001' da árvore não foram modelados — usam on_error='continue' onde cabia, e a etapa fica com uma única tentativa por enquanto.",
+  "variables": {
+    "spreadsheet_path": ""
+  },
+  "groups": [
+    { "id": "g_abrir_diagrama", "label": "Abrir o diagrama", "collapsed": false },
+    { "id": "g_massa", "label": "Alteração em massa da data", "collapsed": false }
+  ],
+  "nodes": [
+    { "id": "n_start", "type": "flow.start", "label": "Início", "position": {"x": 0, "y": 0}, "params": {} },
+    {
+      "id": "n_connect", "type": "sap.connect", "label": "Conectar ao SAP",
+      "position": {"x": 0, "y": 80}, "params": {}, "on_error": "abort"
+    },
+    {
+      "id": "n_read", "type": "data.excel_read", "label": "Ler a planilha",
+      "position": {"x": 0, "y": 160},
+      "params": {
+        "path": "{{spreadsheet_path}}",
+        "columns": [
+          { "name": "PEP", "as": "pep" },
+          { "name": "Diagrama", "as": "diagrama" },
+          { "name": "Data Necessidade", "as": "data_necessidade" }
+        ],
+        "output_var": "linhas"
+      },
+      "on_error": "abort"
+    },
+    {
+      "id": "n_distinct", "type": "data.distinct", "label": "Diagramas únicos",
+      "position": {"x": 0, "y": 240},
+      "params": { "source": "{{linhas}}", "field": "diagrama", "output_var": "diagramas" },
+      "on_error": "abort"
+    },
+    {
+      "id": "n_foreach", "type": "flow.foreach", "label": "Para cada diagrama",
+      "position": {"x": 0, "y": 320},
+      "params": { "source": "{{diagramas}}", "item_var": "diagrama" }
+    },
+
+    {
+      "id": "n_lookup", "type": "data.first_match", "label": "Localizar a linha do diagrama",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 320},
+      "params": { "source": "{{linhas}}", "field": "diagrama", "value": "{{diagrama}}", "output_var": "linha" },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_format_date", "type": "data.format_date", "label": "Validar a data de necessidade",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 364},
+      "params": { "value": "{{linha.data_necessidade}}", "min_days": -60, "max_days": 730, "output_var": "data_formatada" },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_tx", "type": "sap.transaction", "label": "Abrir CJ20N",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 408},
+      "params": { "tcode": "CJ20N" }, "on_error": "skip_item"
+    },
+    {
+      "id": "n_open", "type": "sap.toolbar_press", "label": "Abrir o diagrama",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 452},
+      "params": { "target": { "pack": "cj20n", "ref": "btn_open" }, "button": "OPEN" },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_clear_proj", "type": "sap.set_text", "label": "Limpar filtro de projeto",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 496},
+      "params": { "target": { "pack": "cj20n", "ref": "filter_proj_ext" }, "value": "" },
+      "on_error": "continue"
+    },
+    {
+      "id": "n_clear_prps", "type": "sap.set_text", "label": "Limpar filtro de elemento PEP",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 540},
+      "params": { "target": { "pack": "cj20n", "ref": "filter_prps_ext" }, "value": "" },
+      "on_error": "continue"
+    },
+    {
+      "id": "n_input_diagrama", "type": "sap.set_text", "label": "Informar o diagrama",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 584},
+      "params": { "target": { "pack": "cj20n", "ref": "input_aufnr" }, "value": "{{diagrama}}" },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_confirm_search", "type": "sap.press", "label": "Confirmar busca",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 628},
+      "params": { "target": { "pack": "cj20n", "ref": "btn_search_confirm" } },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_select_tree", "type": "sap.select", "label": "Selecionar o nó do projeto",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 672},
+      "params": { "target": { "pack": "cj20n", "ref": "tree_project" }, "node": "000002" },
+      "on_error": "continue"
+    },
+    {
+      "id": "n_overview", "type": "sap.toolbar_press", "label": "Ir para visão geral de componentes",
+      "group_id": "g_abrir_diagrama", "position": {"x": 340, "y": 716},
+      "params": { "target": { "pack": "cj20n", "ref": "toolbar_overview" }, "button": "COMP_OVW" },
+      "on_error": "skip_item"
+    },
+
+    {
+      "id": "n_mass_copy", "type": "sap.press", "label": "Alteração em massa (copiar dados)",
+      "group_id": "g_massa", "position": {"x": 680, "y": 320},
+      "params": { "target": { "pack": "cj20n", "ref": "btn_mass_copy" } },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_deselect", "type": "sap.press", "label": "Desmarcar todos os campos",
+      "group_id": "g_massa", "position": {"x": 680, "y": 364},
+      "params": { "target": { "pack": "cj20n", "ref": "btn_deselect_all" } },
+      "on_error": "continue"
+    },
+    {
+      "id": "n_mark_bdter", "type": "sap.set_checkbox", "label": "Marcar campo: Data de necessidade",
+      "group_id": "g_massa", "position": {"x": 680, "y": 408},
+      "params": { "target": { "pack": "cj20n", "ref": "chk_mark_bdter" }, "checked": true },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_input_bdter", "type": "sap.set_text", "label": "Preencher a data de necessidade",
+      "group_id": "g_massa", "position": {"x": 680, "y": 452},
+      "params": { "target": { "pack": "cj20n", "ref": "input_bdter" }, "value": "{{data_formatada}}" },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_mark_all", "type": "sap.press", "label": "Marcar todas as posições",
+      "group_id": "g_massa", "position": {"x": 680, "y": 496},
+      "params": { "target": { "pack": "cj20n", "ref": "btn_mark_all_lines" } },
+      "on_error": "skip_item"
+    },
+    {
+      "id": "n_confirm_mass", "type": "sap.press", "label": "Confirmar alteração em massa",
+      "group_id": "g_massa", "position": {"x": 680, "y": 540},
+      "params": { "target": { "pack": "cj20n", "ref": "btn_modal_confirm" } },
+      "on_error": "continue"
+    },
+    {
+      "id": "n_save", "type": "sap.save", "label": "Gravar",
+      "group_id": "g_massa", "position": {"x": 680, "y": 584},
+      "params": {}, "on_error": "skip_item"
+    },
+    {
+      "id": "n_confirm_save", "type": "sap.handle_popup", "label": "Confirmar gravação",
+      "group_id": "g_massa", "position": {"x": 680, "y": 628},
+      "params": { "window": "wnd[1]", "action": "yes", "optional": true },
+      "on_error": "continue"
+    },
+
+    { "id": "n_end", "type": "flow.end", "label": "Fim", "position": {"x": 0, "y": 780}, "params": {} }
+  ],
+  "edges": [
+    { "id": "e1", "from": "n_start", "to": "n_connect", "port": "out" },
+    { "id": "e2", "from": "n_connect", "to": "n_read", "port": "out" },
+    { "id": "e3", "from": "n_read", "to": "n_distinct", "port": "out" },
+    { "id": "e4", "from": "n_distinct", "to": "n_foreach", "port": "out" },
+
+    { "id": "e5", "from": "n_foreach", "to": "n_lookup", "port": "loop" },
+    { "id": "e6", "from": "n_lookup", "to": "n_format_date", "port": "out" },
+    { "id": "e7", "from": "n_format_date", "to": "n_tx", "port": "out" },
+    { "id": "e8", "from": "n_tx", "to": "n_open", "port": "out" },
+    { "id": "e9", "from": "n_open", "to": "n_clear_proj", "port": "out" },
+    { "id": "e10", "from": "n_clear_proj", "to": "n_clear_prps", "port": "out" },
+    { "id": "e11", "from": "n_clear_prps", "to": "n_input_diagrama", "port": "out" },
+    { "id": "e12", "from": "n_input_diagrama", "to": "n_confirm_search", "port": "out" },
+    { "id": "e13", "from": "n_confirm_search", "to": "n_select_tree", "port": "out" },
+    { "id": "e14", "from": "n_select_tree", "to": "n_overview", "port": "out" },
+    { "id": "e15", "from": "n_overview", "to": "n_mass_copy", "port": "out" },
+    { "id": "e16", "from": "n_mass_copy", "to": "n_deselect", "port": "out" },
+    { "id": "e17", "from": "n_deselect", "to": "n_mark_bdter", "port": "out" },
+    { "id": "e18", "from": "n_mark_bdter", "to": "n_input_bdter", "port": "out" },
+    { "id": "e19", "from": "n_input_bdter", "to": "n_mark_all", "port": "out" },
+    { "id": "e20", "from": "n_mark_all", "to": "n_confirm_mass", "port": "out" },
+    { "id": "e21", "from": "n_confirm_mass", "to": "n_save", "port": "out" },
+    { "id": "e22", "from": "n_save", "to": "n_confirm_save", "port": "out" },
+
+    { "id": "e23", "from": "n_foreach", "to": "n_end", "port": "done" }
+  ]
+}

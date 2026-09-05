@@ -3,13 +3,23 @@ GraphTask — interpretador de grafos do Studio.
 Herda RPAJobBase: console, progresso, cancelamento, ROI e gravação em job_history vêm de graça,
 pela mesma razão que SAPZerarCompromissoTask e SAPDataNecessidadeTask já têm tudo isso.
 
-Etapa 1: só executa grafos LINEARES (flow.start -> ... -> flow.end, sem ramificação).
-'flow.foreach' e 'flow.if' são reconhecidos pelo catálogo mas recusados aqui com uma mensagem
-clara — chegam na Etapa 4, quando o corpo do laço passa a mapear sobre get_work_items()/
-process_item() como descrito no plano técnico.
+Etapa 4: laço (flow.foreach) e condicional (flow.if) — o grafo deixa de ser um traço e vira
+automação de verdade. O mapeamento sobre o ciclo de vida do RPAJobBase é o mesmo descrito no
+plano técnico:
+
+    validate_input()  -> valida o grafo e localiza o flow.foreach (se houver), sem executar nada
+    prepare()         -> executa os nós ANTES do foreach (conectar, ler grade/planilha) —
+                         falha aqui aborta o job inteiro, igual a qualquer task nativa
+    get_work_items()  -> resolve o 'source' do foreach para a lista real de itens
+    process_item()    -> executa o corpo do laço para UM item — falha aqui é isolada por
+                         item pelo próprio RPAJobBase.run(), sem código extra
+
+Grafo SEM flow.foreach continua no modo linear da Etapa 1/2: tudo roda dentro de
+process_item() como uma única "execução", exatamente como antes — nenhuma mudança de
+comportamento para os grafos e testes já existentes.
 """
 import time
-from typing import Callable, Dict, Any, List, Optional
+from typing import Callable, Dict, Any, List, Optional, Tuple
 
 from core.rpa.base import RPAJobBase
 from core.studio.execution_context import ExecutionContext
@@ -26,6 +36,23 @@ _POPUP_ACTION_SUFFIX = {
     "cancel": "tbar[0]/btn[12]",
 }
 
+# Operadores válidos de flow.if — despacho fechado em dict, nunca eval()/exec(). Ver plano
+# técnico v2, seção de riscos: "Injeção pelo flow.if".
+_IF_OPERATORS = {
+    "==": lambda a, b: a == b,
+    "!=": lambda a, b: a != b,
+    ">": lambda a, b: a > b,
+    ">=": lambda a, b: a >= b,
+    "<": lambda a, b: a < b,
+    "<=": lambda a, b: a <= b,
+    "contains": lambda a, b: b in a,
+    "empty": lambda a, b: not a,
+    "not_empty": lambda a, b: bool(a),
+}
+
+# Limite defensivo contra ciclo sem stop_type — nenhum grafo real chega perto disso.
+_MAX_CHAIN_STEPS = 5000
+
 
 class GraphTask(RPAJobBase):
     TYPE = "Studio / Grafo"
@@ -38,11 +65,19 @@ class GraphTask(RPAJobBase):
         cancel_check: Optional[Callable[[], bool]] = None,
         params: Optional[Dict[str, Any]] = None,
     ):
+        # Um nó com on_error="abort" dentro do CORPO DO LAÇO precisa poder derrubar o job
+        # inteiro, não só o item corrente — RPAJobBase.run() só reconhece dois motivos pra
+        # isso: sessão SAP desconectada, ou cancel_check() virar True. Este flag alimenta
+        # um cancel_check combinado, então "abort" no meio de um item também para o laço,
+        # em vez de silenciosamente seguir pro próximo item.
+        self._external_cancel_check = cancel_check or (lambda: False)
+        self._abort_requested = False
+
         super().__init__(
             params=params,
             log_callback=log_callback,
             progress_callback=progress_callback,
-            cancel_check=cancel_check,
+            cancel_check=self._is_cancelled,
         )
         self.graph = graph
 
@@ -59,8 +94,13 @@ class GraphTask(RPAJobBase):
         self.ctx = ExecutionContext(sap_session=self.sap)
         for k, v in (graph.get("variables") or {}).items():
             self.ctx.set_var(k, v)
+        for k, v in (self.params or {}).items():
+            self.ctx.set_var(k, v)
 
-        self._chain: List[Dict[str, Any]] = []
+        self._start_node: Optional[Dict[str, Any]] = next(
+            (n for n in graph.get("nodes", []) if n.get("type") == "flow.start"), None
+        )
+        self._foreach_node: Optional[Dict[str, Any]] = None  # definido em validate_input()
 
         self._handlers = {
             "sap.connect": self._h_sap_connect,
@@ -79,7 +119,16 @@ class GraphTask(RPAJobBase):
             "flow.assert_absent": self._h_flow_assert_absent,
             "flow.escape": self._h_flow_escape,
             "data.log": self._h_data_log,
+            "data.excel_read": self._h_data_excel_read,
+            "data.distinct": self._h_data_distinct,
+            "data.first_match": self._h_data_first_match,
+            "data.format_date": self._h_data_format_date,
         }
+
+    # ---- cancelamento (combina o cancel_check externo com abort interno) ----
+
+    def _is_cancelled(self) -> bool:
+        return self._abort_requested or self._external_cancel_check()
 
     # ---- ciclo de vida do RPAJobBase ----
 
@@ -95,74 +144,143 @@ class GraphTask(RPAJobBase):
             details = "; ".join(f"[{e['node_id']}] {e['message']}" if e["node_id"] else e["message"] for e in errors)
             raise ValueError(f"Grafo inválido: {details}")
 
-        self._chain = self._build_linear_chain()
-        self.log("INFO", f"Grafo validado: {len(self._chain)} nó(s) na cadeia linear.")
+        if self._start_node is None:
+            raise ValueError("Grafo sem nó 'flow.start'.")
+
+        boundary = self._locate_boundary()
+        if boundary is not None and boundary["type"] == "flow.foreach":
+            self._foreach_node = boundary
+            done_edge = next(
+                (e for e in self.edges if e.get("from") == boundary["id"] and e.get("port") == "done"),
+                None,
+            )
+            if done_edge is None:
+                raise ValueError(f"'{boundary['id']}' (flow.foreach) não tem aresta na porta 'done'.")
+            done_target = self.nodes_by_id.get(done_edge["to"])
+            if not done_target or done_target.get("type") != "flow.end":
+                raise ValueError(
+                    f"A porta 'done' de '{boundary['id']}' precisa apontar direto para um "
+                    f"'flow.end' nesta etapa — nós depois do laço chegam em etapa futura."
+                )
+            self.log("INFO", f"Grafo com laço: '{boundary['id']}' ({boundary.get('label', '')}).")
+        else:
+            self._foreach_node = None
+            self.log("INFO", "Grafo linear (sem flow.foreach) — execução em item único.")
 
     def prepare(self):
         self.ctx.sap = self.sap
+        if self._foreach_node is None:
+            return
+        # Nós antes do laço (conectar, ler grade/planilha, ...): falha aqui propaga e
+        # aborta o job inteiro — sem tratamento por item, igual a qualquer task nativa.
+        self._run_chain(self._start_node["id"], "out", stop_types=("flow.foreach",))
 
     def get_work_items(self) -> List[Any]:
-        # Grafo linear (Etapa 1): uma única "execução" representa o grafo inteiro.
-        # Isso muda na Etapa 4: com um flow.foreach no grafo, os itens aqui passam a ser
-        # a lista resolvida pelo foreach, e o corpo do laço vira process_item().
-        return [1]
+        if self._foreach_node is None:
+            # Grafo linear (Etapa 1/2): uma única "execução" representa o grafo inteiro.
+            return [1]
+
+        params = self._foreach_node.get("params", {})
+        items = self.ctx.resolve_value(params["source"])
+        if not isinstance(items, list):
+            raise ValueError(
+                f"'source' do flow.foreach ('{params['source']}') precisa resolver para uma "
+                f"lista; veio {type(items).__name__}."
+            )
+        self.ctx.item_var = params.get("item_var", "item")
+        return items
 
     def process_item(self, item: Any, index: int, total: int):
-        for node in self._chain:
-            self._execute_node(node)
+        if self._foreach_node is None:
+            self._run_chain(self._start_node["id"], "out", stop_types=("flow.end",))
+            return
+        self.ctx.item = item
+        self._run_chain(self._foreach_node["id"], "loop", stop_types=("flow.foreach", "flow.end"))
 
-    # ---- montagem da cadeia linear ----
+    # ---- localização estrutural do laço (sem executar nada) ----
 
-    def _build_linear_chain(self) -> List[Dict[str, Any]]:
-        start = next((n for n in self.graph.get("nodes", []) if n.get("type") == "flow.start"), None)
-        if start is None:
-            raise ValueError("Grafo sem nó 'flow.start'.")
-
-        chain: List[Dict[str, Any]] = []
-        current_id = start["id"]
+    def _locate_boundary(self) -> Optional[Dict[str, Any]]:
+        """
+        Caminha do flow.start seguindo só a porta 'out' até achar flow.foreach ou flow.end.
+        Não executa nada — roda dentro de validate_input() só pra decidir o modo (linear x
+        laço). Se encontrar um flow.if antes de qualquer um dos dois, desiste e devolve None:
+        o grafo entra em modo linear, cujo caminhador (_run_chain, usado por process_item())
+        já sabe seguir flow.if normalmente. Só fica ambíguo — e por isso não suportado ainda —
+        um flow.if cujo ramo leve a um flow.foreach; isso aparece como erro em tempo de
+        execução (tipo sem executor), não aqui.
+        """
+        current_id = self._start_node["id"]
         visited = {current_id}
-
         while True:
             edge = next(
                 (e for e in self.edges if e.get("from") == current_id and e.get("port", "out") == "out"),
                 None,
             )
             if edge is None:
-                break
-
+                return None
             nxt = self.nodes_by_id.get(edge["to"])
             if nxt is None:
                 raise ValueError(f"Aresta aponta para nó inexistente: '{edge['to']}'.")
             if nxt["id"] in visited:
-                raise ValueError(f"Ciclo detectado no grafo linear em '{nxt['id']}'.")
+                raise ValueError(f"Ciclo detectado antes do laço, em '{nxt['id']}'.")
             visited.add(nxt["id"])
-
-            ntype = nxt.get("type")
-            if ntype == "flow.end":
-                break
-            if ntype in ("flow.foreach", "flow.if"):
-                raise ValueError(
-                    f"Nó '{nxt['id']}' ({ntype}) requer suporte a laço/condicional, que chega "
-                    f"na Etapa 4. A Etapa 1 só executa grafos lineares (sem ramificação)."
-                )
-
-            chain.append(nxt)
+            if nxt["type"] in ("flow.end", "flow.foreach"):
+                return nxt
+            if nxt["type"] == "flow.if":
+                return None
             current_id = nxt["id"]
 
-        return chain
+    # ---- caminhada que EXECUTA os nós (fase de preparo e corpo do laço) ----
 
-    # ---- execução de um nó ----
+    def _run_chain(
+        self, start_id: str, start_port: str, stop_types: Tuple[str, ...]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Anda pelo grafo a partir de (start_id, start_port), executando cada nó no caminho,
+        até bater num tipo em stop_types (retorna esse nó, sem executá-lo) ou não haver mais
+        aresta (retorna None — fim natural do corpo do laço). flow.if desvia por 'true'/
+        'false' sem contar como nó executado; todo outro tipo passa por _execute_node_in_chain,
+        cujo retorno diz qual porta seguir ('out' no caminho feliz, 'error' com on_error=route).
+        """
+        current_id, current_port = start_id, start_port
+        steps = 0
+        while True:
+            edge = next(
+                (e for e in self.edges if e.get("from") == current_id and e.get("port", "out") == current_port),
+                None,
+            )
+            if edge is None:
+                return None
 
-    def _execute_node(self, node: Dict[str, Any]):
-        ntype = node["type"]
-        node_id = node["id"]
+            nxt = self.nodes_by_id.get(edge["to"])
+            if nxt is None:
+                raise ValueError(f"Aresta aponta para nó inexistente: '{edge['to']}'.")
+            if nxt["type"] in stop_types:
+                return nxt
+
+            steps += 1
+            if steps > _MAX_CHAIN_STEPS:
+                raise RuntimeError(f"Caminho excede {_MAX_CHAIN_STEPS} passos a partir de '{start_id}' — possível ciclo.")
+
+            if nxt["type"] == "flow.if":
+                branch = self._eval_if(nxt)
+                current_id, current_port = nxt["id"], ("true" if branch else "false")
+                continue
+
+            next_port = self._execute_node_in_chain(nxt)
+            current_id, current_port = nxt["id"], next_port
+
+    def _execute_node_in_chain(self, node: Dict[str, Any]) -> str:
+        """
+        Executa um nó e decide qual porta seguir a partir dele, segundo seu on_error:
+        'continue' engole o erro e segue por 'out'; 'route' segue por 'error'; 'skip_item'
+        e 'abort' deixam a exceção subir — quem trata isso é o RPAJobBase (por item) ou o
+        Python (fora de um laço, na fase de preparo, onde qualquer falha aborta o job).
+        """
+        node_id, ntype = node["id"], node["type"]
 
         if not is_implemented(ntype):
-            raise RuntimeError(
-                f"Nó '{node_id}' usa o tipo '{ntype}', ainda não implementado pelo runtime "
-                f"desta etapa."
-            )
-
+            raise RuntimeError(f"Nó '{node_id}' usa o tipo '{ntype}', ainda não implementado pelo runtime.")
         handler = self._handlers.get(ntype)
         if handler is None:
             raise RuntimeError(f"Nenhum executor registrado para o tipo '{ntype}'.")
@@ -171,16 +289,36 @@ class GraphTask(RPAJobBase):
 
         try:
             handler(node)
+            return "out"
         except Exception as exc:
             on_error = node.get("on_error", "abort")
-            if on_error != "abort":
-                self.log(
-                    "WARNING",
-                    f"[{node_id}] on_error='{on_error}' só tem semântica de laço a partir da "
-                    f"Etapa 4 — tratando como 'abort' nesta execução.",
-                )
             self.log("ERROR", f"Falha no nó '{node_id}' ({node.get('label', ntype)}): {exc}")
+
+            if on_error == "continue":
+                self.log("WARNING", f"[{node_id}] on_error='continue' — seguindo para o próximo nó.")
+                return "out"
+            if on_error == "route":
+                self.log("WARNING", f"[{node_id}] on_error='route' — desviando pela porta 'error'.")
+                return "error"
+            if on_error == "abort":
+                self._abort_requested = True
+            # abort ou skip_item: propaga. Dentro de um laço, o RPAJobBase isola por item;
+            # fora dele (fase de preparo, ou grafo linear sem foreach), aborta o job inteiro.
             raise
+
+    def _eval_if(self, node: Dict[str, Any]) -> bool:
+        params = node.get("params", {})
+        left = self.ctx.resolve_value(params["left"])
+        right = self.ctx.resolve_value(params["right"])
+        operator = params["operator"]
+
+        op_fn = _IF_OPERATORS.get(operator)
+        if op_fn is None:
+            raise ValueError(f"Operador inválido em flow.if: '{operator}'.")
+
+        result = bool(op_fn(left, right))
+        self.log("DEBUG", f"[{node['id']}] Se: {left!r} {operator} {right!r} -> {result}")
+        return result
 
     # ---- resolução de alvo de tela ----
 
@@ -370,3 +508,111 @@ class GraphTask(RPAJobBase):
         level = params.get("level", "INFO")
         message = self.ctx.resolve_value(params["message"])
         self.log(level, message)
+
+    def _h_data_excel_read(self, node: Dict[str, Any]):
+        import os
+        import pandas as pd
+
+        params = node.get("params", {})
+        path = self.ctx.resolve_value(params["path"])
+        sheet = params.get("sheet")
+        columns = params["columns"]
+        output_var = params.get("output_var", "linhas")
+
+        if not path or not os.path.exists(path):
+            raise FileNotFoundError(f"Arquivo de planilha não encontrado: '{path}'")
+
+        read_kwargs = {"sheet_name": sheet} if sheet else {}
+        df = pd.read_excel(path, **read_kwargs)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        required = [c["name"] for c in columns]
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise ValueError(f"A planilha deve conter as colunas: {required}. Faltando: {missing}")
+
+        rows: List[Dict[str, Any]] = []
+        for idx, row in df.iterrows():
+            d: Dict[str, Any] = {"_row": int(idx)}
+            for col in columns:
+                key = col.get("as", col["name"])
+                val = row[col["name"]]
+                d[key] = None if pd.isna(val) else val
+            rows.append(d)
+
+        self.ctx.set_var(output_var, rows)
+        self.log("INFO", f"Planilha lida: {len(rows)} linha(s) publicada(s) em '{output_var}'.")
+
+    def _h_data_distinct(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        source = self.ctx.resolve_value(params["source"])
+        field = params["field"]
+        output_var = params["output_var"]
+
+        seen: List[str] = []
+        for row in source:
+            val = row.get(field) if isinstance(row, dict) else None
+            sval = str(val).strip() if val is not None else ""
+            if sval and sval != "nan" and sval not in seen:
+                seen.append(sval)
+
+        if not seen:
+            raise ValueError(f"Nenhum valor válido encontrado no campo '{field}'.")
+
+        self.ctx.set_var(output_var, seen)
+        self.log("INFO", f"{len(seen)} valor(es) único(s) de '{field}' publicados em '{output_var}'.")
+
+    def _h_data_first_match(self, node: Dict[str, Any]):
+        params = node.get("params", {})
+        source = self.ctx.resolve_value(params["source"])
+        field = params["field"]
+        value = self.ctx.resolve_value(params["value"])
+        output_var = params["output_var"]
+
+        target_str = str(value).strip()
+        match = None
+        for row in source:
+            if isinstance(row, dict) and str(row.get(field, "")).strip() == target_str:
+                match = row
+                break
+
+        if match is None:
+            raise ValueError(f"Nenhuma linha encontrada com {field}='{value}'.")
+
+        self.ctx.set_var(output_var, match)
+
+    def _h_data_format_date(self, node: Dict[str, Any]):
+        import pandas as pd
+
+        params = node.get("params", {})
+        raw = self.ctx.resolve_value(params["value"])
+        min_days = int(params.get("min_days", -60))
+        max_days = int(params.get("max_days", 730))
+        output_var = params["output_var"]
+
+        if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+            raise ValueError("Data está vazia ou nula.")
+
+        if isinstance(raw, pd.Timestamp):
+            parsed = raw
+        else:
+            s = str(raw).strip()
+            parsed = pd.to_datetime(s, format="%d/%m/%Y", errors="coerce") if "/" in s \
+                else pd.to_datetime(s, errors="coerce")
+
+        if parsed is None or pd.isna(parsed):
+            raise ValueError(f"Formato de data inválido: '{raw}'. Use DD/MM/AAAA.")
+
+        now = pd.Timestamp.now()
+        diff_days = (parsed - now).days
+        if diff_days < min_days:
+            raise ValueError(f"Data '{parsed.strftime('%d/%m/%Y')}' no passado remoto ({diff_days} dias).")
+        if diff_days > max_days:
+            raise ValueError(
+                f"Data '{parsed.strftime('%d/%m/%Y')}' excede a janela máxima ({diff_days} dias). "
+                f"Possível erro de ano."
+            )
+
+        formatted = parsed.strftime("%d.%m.%Y")
+        self.ctx.set_var(output_var, formatted)
+        self.log("DEBUG", f"[{node['id']}] Data validada: {formatted} ({diff_days} dias).")

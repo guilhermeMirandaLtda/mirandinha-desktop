@@ -170,7 +170,8 @@ class TestGraphTask(unittest.TestCase):
         self.assertEqual(task.MODULE, "Materiais")
         self.assertEqual(task.JOB_NAME, "Grafo de teste")
 
-    def test_foreach_no_grafo_recusa_com_mensagem_de_etapa4(self):
+    def test_foreach_com_done_direto_pro_end_e_aceito(self):
+        """Desde a Etapa 4, flow.foreach é suportado — não é mais recusado."""
         graph = _base_graph(
             nodes=[
                 {"id": "n1", "type": "flow.start", "params": {}},
@@ -183,9 +184,29 @@ class TestGraphTask(unittest.TestCase):
             ],
         )
         task = GraphTask(graph=graph, cancel_check=lambda: False)
+        task.validate_input()  # não levanta
+        self.assertIsNotNone(task._foreach_node)
+        self.assertEqual(task._foreach_node["id"], "n2")
+
+    def test_foreach_com_done_indireto_e_recusado(self):
+        """A porta 'done' precisa apontar direto pra flow.end nesta etapa."""
+        graph = _base_graph(
+            nodes=[
+                {"id": "n1", "type": "flow.start", "params": {}},
+                {"id": "n2", "type": "flow.foreach", "params": {"source": "{{linhas}}"}},
+                {"id": "n3", "type": "data.log", "params": {"message": "resumo"}, "on_error": "continue"},
+                {"id": "n4", "type": "flow.end", "params": {}},
+            ],
+            edges=[
+                {"id": "e1", "from": "n1", "to": "n2", "port": "out"},
+                {"id": "e2", "from": "n2", "to": "n3", "port": "done"},
+                {"id": "e3", "from": "n3", "to": "n4", "port": "out"},
+            ],
+        )
+        task = GraphTask(graph=graph, cancel_check=lambda: False)
         with self.assertRaises(ValueError) as ctx:
             task.validate_input()
-        self.assertIn("Etapa 4", str(ctx.exception))
+        self.assertIn("done", str(ctx.exception))
 
     def test_grafo_invalido_levanta_value_error_na_validacao(self):
         graph = _base_graph(nodes=[{"id": "n1", "type": "flow.end", "params": {}}], edges=[])
